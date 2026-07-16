@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: complianceiq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: complianceiq
+      POSTGRES_PASSWORD: compliance123
+      POSTGRES_DB: complianceiq
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  chromadb:
+    image: chromadb/chroma:1.5.3
+    container_name: complianceiq-chroma
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+volumes:
+  postgres_data:
+  chroma_data:

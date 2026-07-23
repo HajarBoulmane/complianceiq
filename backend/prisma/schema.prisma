@@ -20,5 +20,74 @@ model User {
   role         String   @default("user")
   createdAt    DateTime @default(now()) @map("created_at")
 
+  documents     Document[]
+  conversations Conversation[]
   @@map("users")
+}
+
+model Document {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  filename     String?
+  contractText String   @map("contract_text") @db.Text
+  status       String   @default("processed") // "pending" | "processed" | "failed"
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user         User      @relation(fields: [userId], references: [id])
+  analysis     Analysis?
+
+  @@map("documents")
+}
+
+model Analysis {
+  id                Int      @id @default(autoincrement())
+  documentId        Int      @unique @map("document_id")
+  scoreGlobal        Float    @map("score_global")
+  resume            String   @db.Text
+  categories        Json     // [{ nom, score, nb_problemes }]
+  clausesManquantes Json     @map("clauses_manquantes") // string[]
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  document          Document  @relation(fields: [documentId], references: [id])
+  findings          Finding[]
+
+  @@map("analyses")
+}
+
+model Finding {
+  id              Int      @id @default(autoincrement())
+  analysisId      Int      @map("analysis_id")
+  clause          String
+  severite        String   // "haute" | "moyenne" | "basse"
+  description     String   @db.Text
+  referenceLegale String?  @map("reference_legale")
+
+  analysis        Analysis @relation(fields: [analysisId], references: [id])
+
+  @@map("findings")
+}
+
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String?  // ex: première question posée, pour identifier la conversation dans une liste
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  conversationId Int      @map("conversation_id")
+  role           String   // "user" | "assistant"
+  content        String   @db.Text
+  sources        Json?    // [{ sourceFile, chunkIndex, distance }] — seulement pour role="assistant"
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@map("messages")
 }

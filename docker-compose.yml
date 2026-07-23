@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: complianceiq
-      POSTGRES_PASSWORD: compliance123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: complianceiq
     ports:
       - "5432:5432"
@@ -22,6 +22,57 @@ services:
       - "8000:8000"
     volumes:
       - chroma_data:/chroma/chroma
+
+  rag-service:
+    build: ./rag-service
+    container_name: complianceiq-rag
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      RAG_PORT: 4000
+      CHROMA_URL: http://chromadb:8000
+      GROQ_API_URL: https://api.groq.com/openai/v1/chat/completions
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    depends_on:
+      - chromadb
+    volumes:
+      - ./rag-service/src:/app/src
+      - ./rag-service/data:/app/data
+      - /app/node_modules
+
+  backend:
+    build: ./backend
+    container_name: complianceiq-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://complianceiq:compliance123@postgres:5432/complianceiq
+      RAG_SERVICE_URL: http://rag-service:4000
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+    depends_on:
+      - postgres
+      - rag-service
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+      - /app/node_modules
+
+  frontend:
+    build: ./frontend
+    container_name: complianceiq-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - /app/node_modules
 
 volumes:
   postgres_data:

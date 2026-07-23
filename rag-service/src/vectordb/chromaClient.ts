@@ -1,7 +1,9 @@
 import { ChromaClient } from "chromadb";
 
+const CHROMA_URL = process.env.CHROMA_URL || "http://localhost:8000";
+
 const client = new ChromaClient({
-  path: "http://localhost:8000",
+  path: CHROMA_URL,
 });
 
 const COLLECTION_NAME = "complianceiq_regulations";

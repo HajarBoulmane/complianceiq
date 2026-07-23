@@ -48,7 +48,7 @@ router.post("/analyze-contract", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Erreur /analyze-contract:", err);
     return res.status(500).json({ error: "Erreur interne du serveur", details: err.message });
-  }
+  } 
 });
 
 export default router;

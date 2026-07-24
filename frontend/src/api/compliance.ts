@@ -26,9 +26,20 @@ export interface ConversationMessage {
   sources?: RagSource[];
 }
 
+export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+
+export type ContractType =
+  | "nda"
+  | "cdi"
+  | "cdd"
+  | "prestation_service"
+  | "bail"
+  | "autre";
+
 export interface RiskItem {
   clause: string;
-  severite: "haute" | "moyenne" | "basse";
+  severite: Severity;
+  categorie: string;
   description: string;
   reference_legale?: string;
 }
@@ -65,6 +76,8 @@ export interface CategoryScore {
 }
 
 export interface ContractAnalysis {
+  type_contrat: ContractType;
+  type_contrat_label: string;
   score_global: number;
   categories: CategoryScore[];
   clauses_manquantes: string[];

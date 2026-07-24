@@ -34,21 +34,28 @@ type SeverityStyle = {
 };
 
 const SEVERITY_STYLES: Record<string, SeverityStyle> = {
-  haute: {
-    color: "text-red-600 dark:text-red-400",
-    bg: "bg-red-50 dark:bg-red-500/10",
-    border: "border-red-200 dark:border-red-500/30",
-    icon: <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />,
-    label: "Sévérité haute",
+  CRITICAL: {
+    color: "text-red-700 dark:text-red-400",
+    bg: "bg-red-100 dark:bg-red-500/15",
+    border: "border-red-300 dark:border-red-500/40",
+    icon: <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />,
+    label: "Critique",
   },
-  moyenne: {
+  HIGH: {
     color: "text-orange-600 dark:text-orange-400",
     bg: "bg-orange-50 dark:bg-orange-500/10",
     border: "border-orange-200 dark:border-orange-500/30",
     icon: <AlertTriangle size={16} className="text-orange-500 shrink-0 mt-0.5" />,
+    label: "Sévérité haute",
+  },
+  MEDIUM: {
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-50 dark:bg-amber-500/10",
+    border: "border-amber-200 dark:border-amber-500/30",
+    icon: <Info size={16} className="text-amber-500 shrink-0 mt-0.5" />,
     label: "Sévérité moyenne",
   },
-  basse: {
+  LOW: {
     color: "text-slate-500 dark:text-slate-400",
     bg: "bg-slate-50 dark:bg-slate-500/10",
     border: "border-slate-200 dark:border-slate-500/30",
@@ -58,11 +65,10 @@ const SEVERITY_STYLES: Record<string, SeverityStyle> = {
 };
 
 function scoreColor(score: number) {
-  if (score < 40) return "#EF4444";
-  if (score < 70) return "#F59E0B";
+  if (score < 40) return "#EF4444"; // rouge
+  if (score < 70) return "#F59E0B"; // orange
   return "#22C55E";
 }
-
 export default function Analyze() {
   const [mode, setMode] = useState<"text" | "pdf">("text");
   const [contractText, setContractText] = useState("");
@@ -133,7 +139,7 @@ export default function Analyze() {
 
   const sortedRisques = result
     ? [...result.risques].sort((a, b) => {
-        const order = { haute: 0, moyenne: 1, basse: 2 };
+        const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
         return order[a.severite] - order[b.severite];
       })
     : [];
@@ -381,7 +387,7 @@ export default function Analyze() {
                 </p>
                 <div className="space-y-2">
                   {sortedRisques.map((risque, i) => {
-                    const style = SEVERITY_STYLES[risque.severite] || SEVERITY_STYLES.basse;
+                    const style = SEVERITY_STYLES[risque.severite] || SEVERITY_STYLES.LOW;
                     return (
                       <div
                         key={i}

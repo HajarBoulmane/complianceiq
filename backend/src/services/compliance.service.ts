@@ -225,20 +225,21 @@ export async function getDashboardStats(userId: number) {
   }));
 
   // 5 risques haute sévérité les plus récents (tous documents confondus)
-  const allHighRisks = analyzedDocs
-    .flatMap((d) =>
-      (d.analysis?.findings || [])
-        .filter((f) => f.severite === "haute")
-        .map((f) => ({
-          ...f,
-          documentId: d.id,
-          documentFilename: d.filename,
-          createdAt: d.analysis?.createdAt,
-        }))
-    )
-    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-    .slice(0, 5);
+ 
 
+const allHighRisks = analyzedDocs
+  .flatMap((d) =>
+    (d.analysis?.findings || [])
+      .filter((f) => f.severite === "CRITICAL" || f.severite === "HIGH")
+      .map((f) => ({
+        ...f,
+        documentId: d.id,
+        documentFilename: d.filename,
+        createdAt: d.analysis?.createdAt,
+      }))
+  )
+  .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+  .slice(0, 5);
   return {
     totalDocuments,
     conversationsCount,

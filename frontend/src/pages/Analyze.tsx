@@ -1,4 +1,5 @@
-import { useState, useRef, type ReactNode } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   PieChart,
   Pie,
@@ -10,7 +11,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { analyzeContract } from "../api/compliance";
+import { analyzeContract, getDocumentAnalysis, mapDocumentToAnalysis } from "../api/compliance";
 import type { ContractAnalysis } from "../api/compliance";
 import { extractTextFromPdf } from "../utils/pdfExtract";
 import AppLayout from "../components/Layout";
@@ -65,10 +66,11 @@ const SEVERITY_STYLES: Record<string, SeverityStyle> = {
 };
 
 function scoreColor(score: number) {
-  if (score < 40) return "#EF4444"; // rouge
-  if (score < 70) return "#F59E0B"; // orange
+  if (score < 40) return "#EF4444";
+  if (score < 70) return "#F59E0B";
   return "#22C55E";
 }
+
 export default function Analyze() {
   const [mode, setMode] = useState<"text" | "pdf">("text");
   const [contractText, setContractText] = useState("");
@@ -78,6 +80,49 @@ export default function Analyze() {
   const [result, setResult] = useState<ContractAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const documentId = searchParams.get("documentId");
+
+  useEffect(() => {
+    if (!documentId) return;
+
+    let cancelled = false;
+
+    const loadDocumentAnalysis = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const { document } = await getDocumentAnalysis(Number(documentId));
+
+        if (cancelled) return;
+
+        const mapped = mapDocumentToAnalysis(document);
+        if (!mapped) {
+          setError("Cette analyse n'est pas disponible.");
+          return;
+        }
+
+        setResult(mapped);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setError("Impossible de charger cette analyse.");
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadDocumentAnalysis();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId]);
 
   const handleFileSelect = async (file: File) => {
     if (file.type !== "application/pdf") {
@@ -130,6 +175,14 @@ export default function Analyze() {
     }
   };
 
+  const resetToNewAnalysis = () => {
+    setResult(null);
+    setContractText("");
+    clearPdf();
+    setMode("text");
+    navigate("/analyze");
+  };
+
   const donutData = result
     ? [
         { name: "Score", value: result.score_global },
@@ -146,12 +199,12 @@ export default function Analyze() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto px-1">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
             <FileSearch className="text-pink-500" size={20} />
           </div>
-          <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
+          <h1 className="font-heading text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
             Analyser un contrat
           </h1>
         </div>
@@ -159,7 +212,7 @@ export default function Analyze() {
           Collez le texte du contrat ou importez un PDF pour vérifier sa conformité réglementaire
         </p>
 
-        {!result && (
+        {!result && !documentId && (
           <form onSubmit={handleSubmit} className="mb-8">
             <div className="flex gap-2 mb-4">
               <button
@@ -194,7 +247,7 @@ export default function Analyze() {
                 value={contractText}
                 onChange={(e) => setContractText(e.target.value)}
                 placeholder="Collez ici le texte complet du contrat..."
-                rows={12}
+                rows={10}
                 className="w-full bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 focus:border-pink-400 dark:focus:border-pink-500/40 rounded-2xl p-4 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none resize-none text-sm mb-4 transition shadow-sm"
               />
             )}
@@ -206,7 +259,7 @@ export default function Analyze() {
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-pink-400 dark:hover:border-pink-500/40 rounded-2xl p-12 flex flex-col items-center justify-center text-center cursor-pointer transition bg-white dark:bg-[#0D1410] shadow-sm"
+                    className="w-full border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-pink-400 dark:hover:border-pink-500/40 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center cursor-pointer transition bg-white dark:bg-[#0D1410] shadow-sm"
                   >
                     <Upload size={28} className="text-pink-500 mb-3" />
                     <p className="text-slate-600 dark:text-slate-300 text-sm mb-1">
@@ -266,7 +319,7 @@ export default function Analyze() {
         {loading && (
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-sm mb-6">
             <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-            Analyse du contrat en cours (cela peut prendre quelques secondes)...
+            {documentId ? "Chargement de l'analyse..." : "Analyse du contrat en cours (cela peut prendre quelques secondes)..."}
           </div>
         )}
 
@@ -279,19 +332,14 @@ export default function Analyze() {
         {result && (
           <div className="space-y-6">
             <button
-              onClick={() => {
-                setResult(null);
-                setContractText("");
-                clearPdf();
-                setMode("text");
-              }}
+              onClick={resetToNewAnalysis}
               className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition inline-flex items-center gap-2"
             >
               <FileSearch size={14} />
               Analyser un autre contrat
             </button>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm">
                 <ResponsiveContainer width={140} height={140}>
                   <PieChart>
@@ -320,7 +368,7 @@ export default function Analyze() {
                 </p>
               </div>
 
-              <div className="col-span-2 bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+              <div className="md:col-span-2 bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
                 <p className="text-slate-400 text-xs uppercase tracking-wide mb-3">
                   Résumé
                 </p>
@@ -330,43 +378,45 @@ export default function Analyze() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+            <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm overflow-x-auto">
               <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
                 Scores par catégorie
               </p>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={result.categories} layout="vertical" margin={{ left: 20 }}>
-                  <XAxis type="number" domain={[0, 100]} hide />
-                  <YAxis
-                    type="category"
-                    dataKey="nom"
-                    width={160}
-                    tick={{ fill: "#94A3B8", fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#FFFFFF",
-                      border: "1px solid #E2E8F0",
-                      borderRadius: 8,
-                    }}
-                  />
-                  <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={18}>
-                    {result.categories.map((cat, i) => (
-                      <Cell key={i} fill={scoreColor(cat.score)} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="min-w-[320px]">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={result.categories} layout="vertical" margin={{ left: 20 }}>
+                    <XAxis type="number" domain={[0, 100]} hide />
+                    <YAxis
+                      type="category"
+                      dataKey="nom"
+                      width={140}
+                      tick={{ fill: "#94A3B8", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid #E2E8F0",
+                        borderRadius: 8,
+                      }}
+                    />
+                    <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={18}>
+                      {result.categories.map((cat, i) => (
+                        <Cell key={i} fill={scoreColor(cat.score)} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             {result.clauses_manquantes.length > 0 && (
-              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm">
                 <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
                   Clauses manquantes
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {result.clauses_manquantes.map((clause, i) => (
                     <div
                       key={i}
@@ -394,8 +444,8 @@ export default function Analyze() {
                         className={`flex gap-3 ${style.bg} border ${style.border} rounded-xl px-4 py-3`}
                       >
                         {style.icon}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
                             <p className="text-slate-900 dark:text-white text-sm font-medium">
                               {risque.clause}
                             </p>

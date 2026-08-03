@@ -111,4 +111,58 @@ export async function analyzeContract(contractText: string, filename?: string) {
     method: "POST",
     body: { contractText, filename },
   });
+
+  
 }
+
+export interface DocumentWithAnalysis {
+  id: number;
+  filename: string | null;
+  analysis: {
+    scoreGlobal: number;
+    resume: string;
+    categories: CategoryScore[];
+    clausesManquantes: string[];
+    typeContrat: ContractType;
+    typeContratLabel: string;
+    findings: {
+      clause: string;
+      severite: Severity;
+      categorie: string;
+      description: string;
+      referenceLegale: string | null;
+    }[];
+  } | null;
+}
+
+export const getDocumentAnalysis = (documentId: number) =>
+  apiClient<{ document: DocumentWithAnalysis }>(
+    `/compliance/documents/${documentId}`,
+    { method: "GET" }
+  );
+
+export function mapDocumentToAnalysis(
+  document: DocumentWithAnalysis
+): ContractAnalysis | null {
+  if (!document.analysis) return null;
+  const a = document.analysis;
+  return {
+    type_contrat: a.typeContrat,
+    type_contrat_label: a.typeContratLabel,
+    score_global: a.scoreGlobal,
+    categories: a.categories,
+    clauses_manquantes: a.clausesManquantes,
+    risques: a.findings.map((f) => ({
+      clause: f.clause,
+      severite: f.severite,
+      categorie: f.categorie,
+      description: f.description,
+      reference_legale: f.referenceLegale || undefined,
+    })),
+    resume: a.resume,
+  };
+}
+export const deleteConversation = (conversationId: number) =>
+  apiClient<void>(`/compliance/conversations/${conversationId}`, {
+    method: "DELETE",
+  });

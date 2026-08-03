@@ -44,8 +44,10 @@ model Analysis {
   documentId        Int      @unique @map("document_id")
   scoreGlobal        Float    @map("score_global")
   resume            String   @db.Text
-  categories        Json     // [{ nom, score, nb_problemes }]
-  clausesManquantes Json     @map("clauses_manquantes") // string[]
+  categories        Json
+  clausesManquantes Json     @map("clauses_manquantes")
+  typeContrat       String?  @map("type_contrat")
+  typeContratLabel  String?  @map("type_contrat_label")
   createdAt         DateTime @default(now()) @map("created_at")
 
   document          Document  @relation(fields: [documentId], references: [id])
@@ -58,7 +60,8 @@ model Finding {
   id              Int      @id @default(autoincrement())
   analysisId      Int      @map("analysis_id")
   clause          String
-  severite        String   // "haute" | "moyenne" | "basse"
+  severite        String   // "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+  categorie       String?
   description     String   @db.Text
   referenceLegale String?  @map("reference_legale")
 
@@ -91,3 +94,4 @@ model Message {
 
   @@map("messages")
 }
+

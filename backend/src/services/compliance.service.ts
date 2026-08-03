@@ -105,24 +105,26 @@ export async function analyzeAndSave(userId: number, contractText: string, filen
     },
   });
 
-  await prisma.analysis.create({
-    data: {
-      documentId: document.id,
-      scoreGlobal: analysis.score_global,
-      resume: analysis.resume,
-      categories: analysis.categories,
-      clausesManquantes: analysis.clauses_manquantes,
-      findings: {
-        create: analysis.risques.map((r: any) => ({
-          clause: r.clause,
-          severite: r.severite,
-          description: r.description,
-          referenceLegale: r.reference_legale || null,
-        })),
-      },
+await prisma.analysis.create({
+  data: {
+    documentId: document.id,
+    scoreGlobal: analysis.score_global,
+    resume: analysis.resume,
+    categories: analysis.categories,
+    clausesManquantes: analysis.clauses_manquantes,
+    typeContrat: analysis.type_contrat,
+    typeContratLabel: analysis.type_contrat_label,
+    findings: {
+      create: analysis.risques.map((r: any) => ({
+        clause: r.clause,
+        severite: r.severite,
+        categorie: r.categorie,
+        description: r.description,
+        referenceLegale: r.reference_legale || null,
+      })),
     },
-  });
-
+  },
+});
   return { documentId: document.id, analysis };
 }
 
@@ -252,4 +254,15 @@ const allHighRisks = analyzedDocs
     recentDocuments,
     recentHighRisks: allHighRisks,
   };
+}
+export async function deleteConversation(userId: number, conversationId: number) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, userId },
+  });
+  if (!conversation) throw new Error("CONVERSATION_NOT_FOUND");
+
+  await prisma.$transaction([
+    prisma.message.deleteMany({ where: { conversationId } }),
+    prisma.conversation.delete({ where: { id: conversationId } }),
+  ]);
 }

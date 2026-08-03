@@ -34,8 +34,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-navy dark:bg-navy-dark flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white dark:bg-[#1A1420] flex flex-col shadow-sm">
+      {/* Sidebar — desktop only */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-white dark:bg-[#1A1420] flex-col shadow-sm">
         <div className="bg-gradient-to-r from-pink-500 to-violet-500 px-6 py-5 flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
             <LayoutDashboard size={16} className="text-white" />
@@ -79,13 +79,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
         {/* Top bar */}
-        <div className="bg-white dark:bg-[#1A1420] px-8 py-4 flex items-center justify-between shadow-sm">
-          <h2 className="font-heading text-lg font-bold text-slate-900 dark:text-white">
+        <div className="bg-white dark:bg-[#1A1420] px-4 md:px-8 py-4 flex items-center justify-between shadow-sm">
+          <h2 className="font-heading text-base md:text-lg font-bold text-slate-900 dark:text-white truncate">
             Bienvenue, {user?.fullName?.split(" ")[0]}
           </h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition"
@@ -101,8 +101,27 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="flex-1 p-8 overflow-y-auto">{children}</div>
+        <div className="flex-1 p-4 md:p-8 overflow-y-auto">{children}</div>
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1A1420] border-t border-slate-200 dark:border-white/10 flex items-center justify-around py-2 z-10">
+        {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+          const isActive = location.pathname === to;
+          return (
+            <Link
+              key={to}
+              to={to}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 ${
+                isActive ? "text-pink-600 dark:text-pink-400" : "text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <Icon size={20} />
+              <span className="text-[10px]">{label.split(" ")[0]}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

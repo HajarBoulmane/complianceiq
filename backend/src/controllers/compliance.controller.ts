@@ -4,10 +4,18 @@ import {
   analyzeAndSave,
   getConversations,
   getConversationMessages,
+  deleteConversation as deleteConversationService,
   getDocuments,
   getDocumentAnalysis,
   getDashboardStats,
 } from "../services/compliance.service";
+
+// En dev, on garde les détails dans les logs serveur uniquement.
+// En prod, l'utilisateur ne reçoit jamais err.message (stack trace, requête SQL, etc).
+function handleServerError(res: Response, route: string, err: any) {
+  console.error(`Erreur ${route}:`, err);
+  return res.status(500).json({ error: "Erreur interne du serveur" });
+}
 
 export async function askQuestion(req: Request, res: Response) {
   try {
@@ -22,8 +30,7 @@ export async function askQuestion(req: Request, res: Response) {
     const result = await askAndSave(userId, question, conversationId, topK);
     return res.status(200).json(result);
   } catch (err: any) {
-    console.error("Erreur /compliance/ask:", err);
-    return res.status(500).json({ error: "Erreur interne du serveur", details: err.message });
+    return handleServerError(res, "/compliance/ask", err);
   }
 }
 
@@ -38,8 +45,7 @@ export async function analyzeContract(req: Request, res: Response) {
     const result = await analyzeAndSave(userId, contractText, filename);
     return res.status(200).json(result);
   } catch (err: any) {
-    console.error("Erreur /compliance/analyze-contract:", err);
-    return res.status(500).json({ error: "Erreur interne", details: err.message });
+    return handleServerError(res, "/compliance/analyze-contract", err);
   }
 }
 
@@ -50,7 +56,7 @@ export async function listConversations(req: Request, res: Response) {
     const conversations = await getConversations(userId);
     return res.status(200).json({ conversations });
   } catch (err: any) {
-    return res.status(500).json({ error: "Erreur interne", details: err.message });
+    return handleServerError(res, "/compliance/conversations", err);
   }
 }
 
@@ -63,7 +69,22 @@ export async function getConversation(req: Request, res: Response) {
     const conversation = await getConversationMessages(userId, conversationId);
     return res.status(200).json({ conversation });
   } catch (err: any) {
-    return res.status(404).json({ error: err.message });
+    console.error("Erreur /compliance/conversations/:id:", err);
+    return res.status(404).json({ error: "Conversation introuvable" });
+  }
+}
+
+export async function deleteConversation(req: Request, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Non authentifié" });
+    const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const conversationId = parseInt(idParam, 10);
+    await deleteConversationService(userId, conversationId);
+    return res.status(204).send();
+  } catch (err: any) {
+    console.error("Erreur DELETE /compliance/conversations/:id:", err);
+    return res.status(404).json({ error: "Conversation introuvable" });
   }
 }
 
@@ -74,7 +95,7 @@ export async function listDocuments(req: Request, res: Response) {
     const documents = await getDocuments(userId);
     return res.status(200).json({ documents });
   } catch (err: any) {
-    return res.status(500).json({ error: "Erreur interne", details: err.message });
+    return handleServerError(res, "/compliance/documents", err);
   }
 }
 
@@ -87,7 +108,8 @@ export async function getDocument(req: Request, res: Response) {
     const document = await getDocumentAnalysis(userId, documentId);
     return res.status(200).json({ document });
   } catch (err: any) {
-    return res.status(404).json({ error: err.message });
+    console.error("Erreur /compliance/documents/:id:", err);
+    return res.status(404).json({ error: "Document introuvable" });
   }
 }
 
@@ -98,7 +120,6 @@ export async function getStats(req: Request, res: Response) {
     const stats = await getDashboardStats(userId);
     return res.status(200).json(stats);
   } catch (err: any) {
-    console.error("Erreur /compliance/stats:", err);
-    return res.status(500).json({ error: "Erreur interne", details: err.message });
+    return handleServerError(res, "/compliance/stats", err);
   }
 }

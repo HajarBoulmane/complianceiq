@@ -1,4 +1,9 @@
 import { askLLM } from "./llmClient";
+import { retrieveRelevantChunks, RetrievedChunk } from "../retrieval/retriever";
+import {
+  ContractAnalysisSchema,
+  type ContractAnalysisValidated,
+} from "./contractAnalysisSchema";
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
@@ -16,7 +21,7 @@ export interface ContractAnalysisResult {
   score_global: number;
   categories: {
     nom: string;
-    cle: string; // clé stable pour le frontend (liability, termination, etc.)
+    cle: string;
     score: number;
     nb_problemes: number;
   }[];
@@ -24,15 +29,76 @@ export interface ContractAnalysisResult {
   risques: {
     clause: string;
     severite: Severity;
-    categorie: string; // à quelle dimension ce risque appartient
+    categorie: string;
     description: string;
     reference_legale?: string;
   }[];
   resume: string;
 }
 
-export async function analyzeContract(contractText: string): Promise<ContractAnalysisResult> {
-  const prompt = `Tu es un expert en conformité juridique pour les PME marocaines (droit du travail, protection des données Loi 09-08, RGPD).
+// --- NOUVEAU : queries de retrieval par catégorie ---
+const CATEGORY_QUERIES: Record<string, string> = {
+  liability:
+    "responsabilité contractuelle limitation dommages indemnisation",
+  termination:
+    "préavis résiliation licenciement rupture de contrat indemnités Code du travail",
+  ip_confidentiality:
+    "confidentialité propriété intellectuelle protection des données personnelles Loi 09-08",
+  dispute_resolution:
+    "résolution des litiges tribunal compétent arbitrage droit applicable",
+  payment_terms:
+    "conditions de paiement délais pénalités de retard rémunération",
+  rgpd_compliance:
+    "obligations RGPD Loi 09-08 protection des données personnelles consentement",
+};
+
+// --- NOUVEAU : récupère et dédoublonne les chunks pertinents pour toutes les catégories ---
+async function buildLegalContext(): Promise<string> {
+  const allChunks: RetrievedChunk[] = [];
+  const seen = new Set<string>();
+
+  for (const [categorie, query] of Object.entries(CATEGORY_QUERIES)) {
+    try {
+      const chunks = await retrieveRelevantChunks(query, 3);
+      for (const chunk of chunks) {
+        const key = `${chunk.sourceFile}-${chunk.chunkIndex}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allChunks.push(chunk);
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `[buildLegalContext] Retrieval échoué pour la catégorie "${categorie}":`,
+        err
+      );
+      // on continue avec les autres catégories, pas de crash total
+    }
+  }
+
+  if (allChunks.length === 0) {
+    return "(aucun contexte légal disponible)";
+  }
+
+  return allChunks
+    .map(
+      (c, i) =>
+        `[Source ${i + 1} — ${c.sourceFile}]\n${c.text}`
+    )
+    .join("\n\n");
+}
+
+// --- MODIFIÉ : le template prend maintenant legalContext en paramètre ---
+const ANALYSIS_PROMPT_TEMPLATE = (
+  contractText: string,
+  legalContext: string
+) => `Tu es un expert en conformité juridique pour les PME marocaines (droit du travail, protection des données Loi 09-08, RGPD).
+
+Voici des extraits de textes légaux pertinents, récupérés depuis une base de référence (droit du travail marocain, Loi 09-08, RGPD) :
+
+--- CONTEXTE LÉGAL ---
+${legalContext}
+--- FIN CONTEXTE LÉGAL ---
 
 Étape 1 : identifie d'abord le type de ce contrat parmi EXACTEMENT ces valeurs :
 - "nda" (accord de confidentialité)
@@ -65,7 +131,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après,
       "severite": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
       "categorie": "liability" | "termination" | "ip_confidentiality" | "dispute_resolution" | "payment_terms" | "rgpd_compliance",
       "description": "<explication concise du problème>",
-      "reference_legale": "<référence légale précise si applicable, sinon omettre ce champ>"
+      "reference_legale": "<UNIQUEMENT si le CONTEXTE LÉGAL ci-dessus contient une source pertinente à ce risque précis — cite alors le nom exact de la source (ex: 'code-travail.pdf'). Si aucune source du contexte ne s'applique, OMETS ce champ entièrement — n'invente jamais de référence>"
     }
   ],
   "resume": "<résumé en 2-3 phrases de l'état général de conformité du contrat>"
@@ -84,25 +150,88 @@ Règles :
 - Si aucun problème dans une catégorie, score = 100 et nb_problemes = 0
 - Chaque risque doit être concret et référencé au texte du contrat, jamais générique
 - Classe chaque risque dans UNE SEULE catégorie (celle la plus pertinente)
+- reference_legale ne doit JAMAIS être inventée : uniquement si une source du CONTEXTE LÉGAL s'applique directement
 
 CONTRAT :
 ${contractText}
 
 Réponds uniquement avec le JSON, rien d'autre.`;
 
-  const rawResponse = await askLLM(prompt);
-
-  const cleaned = rawResponse
+function cleanLlmJson(rawResponse: string): string {
+  return rawResponse
     .trim()
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/```\s*$/i, "");
+}
 
+// --- MODIFIÉ : callAndValidate prend maintenant legalContext ---
+async function callAndValidate(
+  contractText: string,
+  legalContext: string
+): Promise<
+  | { ok: true; data: ContractAnalysisValidated }
+  | { ok: false; rawResponse: string; error: string }
+> {
+  const rawResponse = await askLLM(
+    ANALYSIS_PROMPT_TEMPLATE(contractText, legalContext)
+  );
+  const cleaned = cleanLlmJson(rawResponse);
+
+  let parsedJson: unknown;
   try {
-    return JSON.parse(cleaned);
-  } catch (err) {
+    parsedJson = JSON.parse(cleaned);
+  } catch {
+    return {
+      ok: false,
+      rawResponse,
+      error: "JSON invalide (parse a échoué)",
+    };
+  }
+
+  const result = ContractAnalysisSchema.safeParse(parsedJson);
+  if (!result.success) {
+    return {
+      ok: false,
+      rawResponse,
+      error: result.error.issues
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join(" | "),
+    };
+  }
+
+  return { ok: true, data: result.data };
+}
+
+// --- MODIFIÉ : analyzeContract construit le contexte légal avant tout ---
+export async function analyzeContract(
+  contractText: string
+): Promise<ContractAnalysisResult> {
+  const legalContext = await buildLegalContext();
+
+  // 1ère tentative
+  let attempt = await callAndValidate(contractText, legalContext);
+
+  // Le LLM peut mal formater par accident (JSON tronqué, champ en trop) —
+  // un seul retry suffit dans la grande majorité des cas avant d'abandonner.
+  if (!attempt.ok) {
+    console.warn(
+      `[analyzeContract] Validation échouée (tentative 1): ${attempt.error}. Nouvelle tentative...`
+    );
+    attempt = await callAndValidate(contractText, legalContext);
+  }
+
+  if (!attempt.ok) {
+    console.error(
+      `[analyzeContract] Validation échouée après 2 tentatives: ${attempt.error}`
+    );
+    console.error(
+      `[analyzeContract] Réponse brute: ${attempt.rawResponse.slice(0, 500)}`
+    );
     throw new Error(
-      `Le LLM n'a pas retourné un JSON valide. Réponse brute: ${rawResponse.slice(0, 500)}`
+      "L'analyse n'a pas pu être générée de manière fiable. Veuillez réessayer."
     );
   }
+
+  return attempt.data;
 }

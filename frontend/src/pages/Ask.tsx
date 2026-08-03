@@ -1,7 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { askQuestion, listConversations, getConversationMessages } from "../api/compliance";
-import type { AskResponse, Conversation, ConversationMessage } from "../api/compliance";
+import {
+  askQuestion,
+  listConversations,
+  getConversationMessages,
+  deleteConversation,
+} from "../api/compliance";
+import type {
+  AskResponse,
+  Conversation,
+  ConversationMessage,
+} from "../api/compliance";
 import { useAuth } from "../context/authContext";
 import { useTheme } from "../context/themeContext";
 
@@ -15,6 +24,8 @@ import {
   Bell,
   Plus,
   LayoutDashboard,
+  FileSearch,
+  Trash2,
 } from "lucide-react";
 
 type ChatMessage = {
@@ -30,7 +41,12 @@ export default function Ask() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<
+    number | null
+  >(null);
+  const [conversationToDelete, setConversationToDelete] = useState<
+    Conversation | null
+  >(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -54,15 +70,44 @@ export default function Ask() {
     setActiveConversationId(id);
     try {
       const res = await getConversationMessages(id);
-      const chatMsgs = res.conversation.messages.map((msg: ConversationMessage) => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        sources: msg.sources,
-      }));
+      const chatMsgs = res.conversation.messages.map(
+        (msg: ConversationMessage) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          sources: msg.sources,
+        }),
+      );
       setMessages(chatMsgs);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleDeleteConversation = (
+    event: React.MouseEvent,
+    conversation: Conversation,
+  ) => {
+    event.stopPropagation();
+    setConversationToDelete(conversation);
+  };
+
+  const confirmDelete = async () => {
+    if (!conversationToDelete) return;
+
+    try {
+      await deleteConversation(conversationToDelete.id);
+      setConversations((prev) =>
+        prev.filter((conversation) => conversation.id !== conversationToDelete.id),
+      );
+
+      if (activeConversationId === conversationToDelete.id) {
+        startNewConversation();
+      }
+    } catch (err) {
+      console.error("Erreur lors de la suppression:", err);
+    } finally {
+      setConversationToDelete(null);
     }
   };
 
@@ -81,7 +126,10 @@ export default function Ask() {
     setLoading(true);
 
     try {
-      const data = await askQuestion(trimmed, activeConversationId ?? undefined);
+      const data = await askQuestion(
+        trimmed,
+        activeConversationId ?? undefined,
+      );
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -118,9 +166,9 @@ export default function Ask() {
   };
 
   return (
-    <div className="min-h-screen bg-violet-50/50 dark:bg-navy flex">
-      {/* Sidebar — matches Dashboard styling */}
-      <aside className="w-64 bg-white dark:bg-[#1A1420] flex flex-col shadow-sm">
+    <div className="h-screen bg-violet-50/50 dark:bg-navy flex overflow-hidden">
+      {/* Sidebar — desktop only */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-white dark:bg-[#1A1420] flex-col shadow-sm">
         <div className="bg-gradient-to-r from-pink-500 to-violet-500 px-6 py-5 flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
             <LayoutDashboard size={16} className="text-white" />
@@ -142,17 +190,32 @@ export default function Ask() {
 
         <div className="flex-1 overflow-y-auto px-2 space-y-1 pb-4">
           {conversations.map((conv) => (
-            <button
+            <div
               key={conv.id}
-              onClick={() => loadConversation(conv.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm truncate transition ${
+              className={`group w-full flex items-center gap-1 rounded-xl transition ${
                 activeConversationId === conv.id
-                  ? "bg-pink-50 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium"
-                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-pink-50 dark:bg-pink-500/10"
+                  : "hover:bg-slate-50 dark:hover:bg-white/5"
               }`}
             >
-              {conv.title || "Nouvelle conversation"}
-            </button>
+              <button
+                onClick={() => loadConversation(conv.id)}
+                className={`flex-1 min-w-0 text-left px-3 py-2.5 text-sm truncate transition ${
+                  activeConversationId === conv.id
+                    ? "text-pink-600 dark:text-pink-400 font-medium"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                {conv.title || "Nouvelle conversation"}
+              </button>
+              <button
+                onClick={(e) => handleDeleteConversation(e, conv)}
+                className="shrink-0 p-1.5 mr-1 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition"
+                title="Supprimer la conversation"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
         </div>
 
@@ -166,13 +229,13 @@ export default function Ask() {
       </aside>
 
       {/* Main column */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 pb-16 md:pb-0 overflow-hidden">
         {/* Header */}
-        <div className="bg-white dark:bg-[#1A1420] px-8 py-4 flex items-center justify-between shadow-sm shrink-0">
-          <h2 className="font-heading text-lg font-bold text-slate-900 dark:text-white">
+        <div className="bg-white dark:bg-[#1A1420] px-4 md:px-8 py-4 flex items-center justify-between shadow-sm shrink-0">
+          <h2 className="font-heading text-base md:text-lg font-bold text-slate-900 dark:text-white truncate">
             Bienvenue, {user?.fullName?.split(" ")[0]}
           </h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition"
@@ -189,27 +252,28 @@ export default function Ask() {
         </div>
 
         {/* Chat area */}
-        <div className="max-w-3xl w-full mx-auto flex flex-col flex-1 p-8 pb-4 min-h-0">
+        <div className="max-w-3xl w-full mx-auto flex flex-col flex-1 p-4 md:p-8 pb-4 min-h-0 overflow-hidden">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
               <MessageSquareText className="text-pink-500" size={20} />
             </div>
-            <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-pink">
+            <h1 className="font-heading text-xl md:text-2xl font-bold text-slate-900 dark:text-pink">
               Poser une question
             </h1>
           </div>
           <p className="text-slate-400 text-sm mb-6">
-            Interrogez la base réglementaire (CNDP, Code du travail marocain, RGPD)
+            Interrogez la base réglementaire (CNDP, Code du travail marocain,
+            RGPD)
           </p>
 
           {/* Message thread */}
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4 min-h-[300px]">
+          <div className="flex-1 overflow-y-auto space-y-4 mb-4 min-h-0">
             {messages.length === 0 && !loading && (
               <div className="h-full flex items-center justify-center text-center py-16">
                 <p className="text-slate-400 text-sm max-w-sm">
-                  Posez une question sur vos obligations réglementaires. Ex : "Quelles
-                  sont les obligations RGPD pour la conservation des données
-                  clients ?"
+                  Posez une question sur vos obligations réglementaires. Ex :
+                  "Quelles sont les obligations RGPD pour la conservation des
+                  données clients ?"
                 </p>
               </div>
             )}
@@ -228,16 +292,20 @@ export default function Ask() {
                       : "bg-pink-50 dark:bg-pink-500/10 text-pink-500"
                   }`}
                 >
-                  {msg.role === "user" ? <User size={15} /> : <MessageSquareText size={15} />}
+                  {msg.role === "user" ? (
+                    <User size={15} />
+                  ) : (
+                    <MessageSquareText size={15} />
+                  )}
                 </div>
 
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                  className={`max-w-[85%] md:max-w-[80%] rounded-2xl px-4 py-3 ${
                     msg.role === "user"
                       ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white"
                       : msg.error
-                      ? "bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 text-orange-600 dark:text-orange-400"
-                      : "bg-white dark:bg-[#0D1410] border border-slate-100 dark:border-white/5 text-slate-700 dark:text-slate-200 shadow-sm"
+                        ? "bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 text-orange-600 dark:text-orange-400"
+                        : "bg-white dark:bg-[#0D1410] border border-slate-100 dark:border-white/5 text-slate-700 dark:text-slate-200 shadow-sm"
                   }`}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed text-sm">
@@ -245,30 +313,51 @@ export default function Ask() {
                   </p>
 
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className={`mt-3 pt-3 border-t space-y-2 ${
-                      msg.role === "user" ? "border-white/20" : "border-slate-100 dark:border-white/10"
-                    }`}>
-                      <p className={`text-xs uppercase tracking-wide ${
-                        msg.role === "user" ? "text-white/70" : "text-slate-400"
-                      }`}>
+                    <div
+                      className={`mt-3 pt-3 border-t space-y-2 ${
+                        msg.role === "user"
+                          ? "border-white/20"
+                          : "border-slate-100 dark:border-white/10"
+                      }`}
+                    >
+                      <p
+                        className={`text-xs uppercase tracking-wide ${
+                          msg.role === "user"
+                            ? "text-white/70"
+                            : "text-slate-400"
+                        }`}
+                      >
                         Sources consultées
                       </p>
                       {msg.sources.map((source, i) => (
                         <div
                           key={i}
                           className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                            msg.role === "user" ? "bg-white/10" : "bg-slate-50 dark:bg-white/5"
+                            msg.role === "user"
+                              ? "bg-white/10"
+                              : "bg-slate-50 dark:bg-white/5"
                           }`}
                         >
-                          <FileText size={14} className="shrink-0 text-pink-400" />
-                          <span className={`text-xs ${
-                            msg.role === "user" ? "text-white/90" : "text-slate-500 dark:text-slate-300"
-                          }`}>
+                          <FileText
+                            size={14}
+                            className="shrink-0 text-pink-400"
+                          />
+                          <span
+                            className={`text-xs ${
+                              msg.role === "user"
+                                ? "text-white/90"
+                                : "text-slate-500 dark:text-slate-300"
+                            }`}
+                          >
                             {source.sourceFile}
                           </span>
-                          <span className={`text-xs ml-auto ${
-                            msg.role === "user" ? "text-white/60" : "text-slate-400"
-                          }`}>
+                          <span
+                            className={`text-xs ml-auto ${
+                              msg.role === "user"
+                                ? "text-white/60"
+                                : "text-slate-400"
+                            }`}
+                          >
                             section #{source.chunkIndex}
                           </span>
                         </div>
@@ -318,6 +407,70 @@ export default function Ask() {
           </form>
         </div>
       </div>
+
+      {conversationToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-[#1A1420]">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-500 dark:bg-red-500/10">
+                <Trash2 size={18} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Supprimer la conversation
+                </h3>
+              </div>
+            </div>
+
+            <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Êtes-vous sûr de vouloir supprimer
+              <span className="font-semibold text-slate-900 dark:text-white">
+                {" "}{conversationToDelete.title || "cette conversation"}
+              </span>
+              ? Cette action est irréversible.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConversationToDelete(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile bottom nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1A1420] border-t border-slate-200 dark:border-white/10 flex items-center justify-around py-2 z-10">
+        <Link
+          to="/dashboard"
+          className="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-500 dark:text-slate-400"
+        >
+          <LayoutDashboard size={20} />
+          <span className="text-[10px]">Dashboard</span>
+        </Link>
+        <a className="flex flex-col items-center gap-0.5 px-3 py-1 text-pink-600 dark:text-pink-400">
+          <MessageSquareText size={20} />
+          <span className="text-[10px]">Question</span>
+        </a>
+        <Link
+          to="/analyze"
+          className="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-500 dark:text-slate-400"
+        >
+          <FileSearch size={20} />
+          <span className="text-[10px]">Analyser</span>
+        </Link>
+      </nav>
     </div>
   );
 }

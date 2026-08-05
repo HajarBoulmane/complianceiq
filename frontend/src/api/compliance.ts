@@ -42,7 +42,9 @@ export interface RiskItem {
   categorie: string;
   description: string;
   reference_legale?: string;
+  clause_suggeree?: string;
 }
+
 export interface DashboardStats {
   totalDocuments: number;
   conversationsCount: number;
@@ -69,6 +71,7 @@ export interface LoginPayload {
   email: string;
   password: string;
 }
+
 export interface CategoryScore {
   nom: string;
   score: number;
@@ -111,8 +114,6 @@ export async function analyzeContract(contractText: string, filename?: string) {
     method: "POST",
     body: { contractText, filename },
   });
-
-  
 }
 
 export interface DocumentWithAnalysis {
@@ -131,6 +132,7 @@ export interface DocumentWithAnalysis {
       categorie: string;
       description: string;
       referenceLegale: string | null;
+      suggestedClause: string | null;
     }[];
   } | null;
 }
@@ -158,11 +160,51 @@ export function mapDocumentToAnalysis(
       categorie: f.categorie,
       description: f.description,
       reference_legale: f.referenceLegale || undefined,
+      clause_suggeree: f.suggestedClause || undefined,
     })),
     resume: a.resume,
   };
 }
+
 export const deleteConversation = (conversationId: number) =>
   apiClient<void>(`/compliance/conversations/${conversationId}`, {
     method: "DELETE",
   });
+
+export interface Obligation {
+  id: number;
+  type: "RENEWAL" | "PAYMENT" | "NOTICE" | "OTHER";
+  description: string;
+  dueDate: string | null;
+  status: string;
+  document?: { filename: string | null };
+}
+
+export async function getUpcomingObligations(withinDays = 30): Promise<{ obligations: Obligation[] }> {
+  return apiClient<{ obligations: Obligation[] }>(`/compliance/obligations?withinDays=${withinDays}`, {
+    method: "GET",
+  });
+}
+
+export type NotificationType = "RENEWAL_DUE" | "PAYMENT_DUE" | "CLAUSE_SUGGESTED";
+
+export interface NotificationItem {
+  id: number;
+  type: NotificationType;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  documentId?: number | null;
+}
+
+export const getNotifications = (unreadOnly?: boolean) =>
+  apiClient<{ notifications: NotificationItem[] }>(
+    `/compliance/notifications${unreadOnly ? "?unreadOnly=true" : ""}`,
+    { method: "GET" }
+  );
+
+export const markNotificationRead = (notificationId: number) =>
+  apiClient<{ notification: NotificationItem }>(
+    `/compliance/notifications/${notificationId}/read`,
+    { method: "PATCH" }
+  );

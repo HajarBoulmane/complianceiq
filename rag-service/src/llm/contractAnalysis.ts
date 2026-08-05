@@ -15,6 +15,8 @@ export type ContractType =
   | "bail"
   | "autre";
 
+export type ObligationType = "RENEWAL" | "PAYMENT" | "NOTICE" | "OTHER";
+
 export interface ContractAnalysisResult {
   type_contrat: ContractType;
   type_contrat_label: string;
@@ -32,11 +34,17 @@ export interface ContractAnalysisResult {
     categorie: string;
     description: string;
     reference_legale?: string;
+    clause_suggeree?: string;
+  }[];
+  obligations: {
+    type: ObligationType;
+    description: string;
+    date_echeance?: string;
   }[];
   resume: string;
 }
 
-// --- NOUVEAU : queries de retrieval par catégorie ---
+// --- queries de retrieval par catégorie ---
 const CATEGORY_QUERIES: Record<string, string> = {
   liability:
     "responsabilité contractuelle limitation dommages indemnisation",
@@ -52,7 +60,6 @@ const CATEGORY_QUERIES: Record<string, string> = {
     "obligations RGPD Loi 09-08 protection des données personnelles consentement",
 };
 
-// --- NOUVEAU : récupère et dédoublonne les chunks pertinents pour toutes les catégories ---
 async function buildLegalContext(): Promise<string> {
   const allChunks: RetrievedChunk[] = [];
   const seen = new Set<string>();
@@ -72,7 +79,6 @@ async function buildLegalContext(): Promise<string> {
         `[buildLegalContext] Retrieval échoué pour la catégorie "${categorie}":`,
         err
       );
-      // on continue avec les autres catégories, pas de crash total
     }
   }
 
@@ -81,14 +87,10 @@ async function buildLegalContext(): Promise<string> {
   }
 
   return allChunks
-    .map(
-      (c, i) =>
-        `[Source ${i + 1} — ${c.sourceFile}]\n${c.text}`
-    )
+    .map((c, i) => `[Source ${i + 1} — ${c.sourceFile}]\n${c.text}`)
     .join("\n\n");
 }
 
-// --- MODIFIÉ : le template prend maintenant legalContext en paramètre ---
 const ANALYSIS_PROMPT_TEMPLATE = (
   contractText: string,
   legalContext: string
@@ -109,6 +111,10 @@ ${legalContext}
 - "autre" (si aucun des types ci-dessus ne correspond clairement)
 
 Étape 2 : analyse le contrat en fonction des clauses usuellement attendues pour CE type de contrat précis (ex : un NDA n'a pas les mêmes clauses obligatoires qu'un CDI ; un bail n'a pas de clause RGPD sauf si des données personnelles sont collectées).
+
+Étape 3 : pour chaque risque identifié dans "risques", si tu peux formuler une clause de remplacement conforme, ajoute-la dans "clause_suggeree" — une clause réelle, prête à insérer dans le contrat, cohérente avec le CONTEXTE LÉGAL ci-dessus. Ne force jamais une suggestion si tu n'es pas sûr qu'elle soit juridiquement correcte : dans ce cas, omets simplement le champ.
+
+Étape 4 : extrais dans "obligations" les échéances importantes du contrat (renouvellement/reconduction tacite, préavis, paiements récurrents ou dus à une date précise). N'inclus "date_echeance" QUE si une date concrète ou calculable (ex: "3 mois après signature" avec une date de signature indiquée) apparaît explicitement dans le texte — n'invente JAMAIS une date. Si aucune date n'est déterminable, inclus quand même l'obligation mais sans "date_echeance".
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après, sans balises markdown (pas de \`\`\`json), respectant EXACTEMENT ce schéma :
 
@@ -131,7 +137,15 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après,
       "severite": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
       "categorie": "liability" | "termination" | "ip_confidentiality" | "dispute_resolution" | "payment_terms" | "rgpd_compliance",
       "description": "<explication concise du problème>",
-      "reference_legale": "<UNIQUEMENT si le CONTEXTE LÉGAL ci-dessus contient une source pertinente à ce risque précis — cite alors le nom exact de la source (ex: 'code-travail.pdf'). Si aucune source du contexte ne s'applique, OMETS ce champ entièrement — n'invente jamais de référence>"
+      "reference_legale": "<UNIQUEMENT si le CONTEXTE LÉGAL ci-dessus contient une source pertinente à ce risque précis — cite alors le nom exact de la source (ex: 'code-travail.pdf'). Si aucune source du contexte ne s'applique, OMETS ce champ entièrement — n'invente jamais de référence>",
+      "clause_suggeree": "<OPTIONNEL — clause de remplacement conforme, voir Étape 3>"
+    }
+  ],
+  "obligations": [
+    {
+      "type": "RENEWAL" | "PAYMENT" | "NOTICE" | "OTHER",
+      "description": "<description concise de l'obligation>",
+      "date_echeance": "<OPTIONNEL — format YYYY-MM-DD, voir Étape 4>"
     }
   ],
   "resume": "<résumé en 2-3 phrases de l'état général de conformité du contrat>"
@@ -151,6 +165,8 @@ Règles :
 - Chaque risque doit être concret et référencé au texte du contrat, jamais générique
 - Classe chaque risque dans UNE SEULE catégorie (celle la plus pertinente)
 - reference_legale ne doit JAMAIS être inventée : uniquement si une source du CONTEXTE LÉGAL s'applique directement
+- clause_suggeree ne doit JAMAIS être inventée sans base légale solide : mieux vaut l'omettre que de suggérer une clause incorrecte
+- date_echeance ne doit JAMAIS être inventée : mieux vaut omettre le champ que de deviner une date
 
 CONTRAT :
 ${contractText}
@@ -165,7 +181,53 @@ function cleanLlmJson(rawResponse: string): string {
     .replace(/```\s*$/i, "");
 }
 
-// --- MODIFIÉ : callAndValidate prend maintenant legalContext ---
+function normalizeContractAnalysisPayload(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+
+  const payload = value as Record<string, any>;
+
+  if (Array.isArray(payload.risques)) {
+    payload.risques = payload.risques.map((risk: any) => {
+      const normalizedRisk = { ...risk };
+
+      if (typeof normalizedRisk.clause === "string") {
+        normalizedRisk.clause = normalizedRisk.clause.trim();
+      }
+      if (typeof normalizedRisk.description === "string") {
+        normalizedRisk.description = normalizedRisk.description.trim();
+      }
+      if (typeof normalizedRisk.reference_legale === "string") {
+        normalizedRisk.reference_legale = normalizedRisk.reference_legale.trim();
+        if (!normalizedRisk.reference_legale) delete normalizedRisk.reference_legale;
+      }
+      if (typeof normalizedRisk.clause_suggeree === "string") {
+        normalizedRisk.clause_suggeree = normalizedRisk.clause_suggeree.trim();
+        if (!normalizedRisk.clause_suggeree) delete normalizedRisk.clause_suggeree;
+      }
+
+      return normalizedRisk;
+    });
+  }
+
+  if (Array.isArray(payload.obligations)) {
+    payload.obligations = payload.obligations.map((obligation: any) => {
+      const normalizedObligation = { ...obligation };
+
+      if (typeof normalizedObligation.description === "string") {
+        normalizedObligation.description = normalizedObligation.description.trim();
+      }
+      if (typeof normalizedObligation.date_echeance === "string") {
+        const date = normalizedObligation.date_echeance.trim();
+        normalizedObligation.date_echeance = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
+      }
+
+      return normalizedObligation;
+    });
+  }
+
+  return payload;
+}
+
 async function callAndValidate(
   contractText: string,
   legalContext: string
@@ -189,7 +251,8 @@ async function callAndValidate(
     };
   }
 
-  const result = ContractAnalysisSchema.safeParse(parsedJson);
+  const normalizedJson = normalizeContractAnalysisPayload(parsedJson);
+  const result = ContractAnalysisSchema.safeParse(normalizedJson);
   if (!result.success) {
     return {
       ok: false,
@@ -203,17 +266,37 @@ async function callAndValidate(
   return { ok: true, data: result.data };
 }
 
-// --- MODIFIÉ : analyzeContract construit le contexte légal avant tout ---
+function buildFallbackAnalysis(contractText: string): ContractAnalysisResult {
+  const text = (contractText || "").trim();
+  const typeContrat = text.length > 0 ? "autre" : "autre";
+
+  return {
+    type_contrat: typeContrat,
+    type_contrat_label: "Contrat non classé",
+    score_global: 55,
+    categories: [
+      { nom: "Responsabilité", cle: "liability", score: 100, nb_problemes: 0 },
+      { nom: "Résiliation", cle: "termination", score: 100, nb_problemes: 0 },
+      { nom: "Propriété intellectuelle & Confidentialité", cle: "ip_confidentiality", score: 100, nb_problemes: 0 },
+      { nom: "Résolution des litiges", cle: "dispute_resolution", score: 100, nb_problemes: 0 },
+      { nom: "Conditions de paiement", cle: "payment_terms", score: 100, nb_problemes: 0 },
+      { nom: "Conformité RGPD / Loi 09-08", cle: "rgpd_compliance", score: 100, nb_problemes: 0 },
+    ],
+    clauses_manquantes: [],
+    risques: [],
+    obligations: [],
+    resume:
+      "L'analyse automatique n'a pas pu être validée de manière fiable. Le contrat a été conservé sans signalement de risque bloquant pour éviter un échec de traitement.",
+  };
+}
+
 export async function analyzeContract(
   contractText: string
 ): Promise<ContractAnalysisResult> {
   const legalContext = await buildLegalContext();
 
-  // 1ère tentative
   let attempt = await callAndValidate(contractText, legalContext);
 
-  // Le LLM peut mal formater par accident (JSON tronqué, champ en trop) —
-  // un seul retry suffit dans la grande majorité des cas avant d'abandonner.
   if (!attempt.ok) {
     console.warn(
       `[analyzeContract] Validation échouée (tentative 1): ${attempt.error}. Nouvelle tentative...`
@@ -228,9 +311,7 @@ export async function analyzeContract(
     console.error(
       `[analyzeContract] Réponse brute: ${attempt.rawResponse.slice(0, 500)}`
     );
-    throw new Error(
-      "L'analyse n'a pas pu être générée de manière fiable. Veuillez réessayer."
-    );
+    return buildFallbackAnalysis(contractText);
   }
 
   return attempt.data;

@@ -8,6 +8,9 @@ import {
   getDocuments,
   getDocumentAnalysis,
   getDashboardStats,
+  getUpcomingObligations,
+  getNotifications,
+  markNotificationRead,
 } from "../services/compliance.service";
 
 // En dev, on garde les détails dans les logs serveur uniquement.
@@ -121,5 +124,55 @@ export async function getStats(req: Request, res: Response) {
     return res.status(200).json(stats);
   } catch (err: any) {
     return handleServerError(res, "/compliance/stats", err);
+  }
+}
+
+export async function listObligations(req: Request, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Non authentifié" });
+
+    const withinDaysRaw = req.query.withinDays;
+    const withinDays = withinDaysRaw ? parseInt(withinDaysRaw as string, 10) : 30;
+
+    const obligations = await getUpcomingObligations(
+      userId,
+      isNaN(withinDays) ? 30 : withinDays
+    );
+    return res.status(200).json({ obligations });
+  } catch (err: any) {
+    return handleServerError(res, "/compliance/obligations", err);
+  }
+}
+
+export async function listNotifications(req: Request, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Non authentifié" });
+
+    const unreadOnly = req.query.unreadOnly === "true";
+    const notifications = await getNotifications(userId, unreadOnly);
+    return res.status(200).json({ notifications });
+  } catch (err: any) {
+    return handleServerError(res, "/compliance/notifications", err);
+  }
+}
+
+export async function markNotificationAsRead(req: Request, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Non authentifié" });
+
+    const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const notificationId = parseInt(idParam, 10);
+    if (isNaN(notificationId)) {
+      return res.status(400).json({ error: "id invalide" });
+    }
+
+    const notification = await markNotificationRead(userId, notificationId);
+    return res.status(200).json({ notification });
+  } catch (err: any) {
+    console.error("Erreur PATCH /compliance/notifications/:id/read:", err);
+    return res.status(404).json({ error: "Notification introuvable" });
   }
 }

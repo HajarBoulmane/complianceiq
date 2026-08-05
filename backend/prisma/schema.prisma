@@ -22,6 +22,7 @@ model User {
 
   documents     Document[]
   conversations Conversation[]
+  notifications Notification[]
   @@map("users")
 }
 
@@ -35,7 +36,8 @@ model Document {
 
   user         User      @relation(fields: [userId], references: [id])
   analysis     Analysis?
-
+  obligations   Obligation[]
+  notifications Notification[]
   @@map("documents")
 }
 
@@ -66,7 +68,7 @@ model Finding {
   referenceLegale String?  @map("reference_legale")
 
   analysis        Analysis @relation(fields: [analysisId], references: [id])
-
+  suggestedClause String? @map("suggested_clause") @db.Text
   @@map("findings")
 }
 
@@ -95,3 +97,31 @@ model Message {
   @@map("messages")
 }
 
+model Obligation {
+  id          Int       @id @default(autoincrement())
+  documentId  Int       @map("document_id")
+  type        String    // "RENEWAL" | "PAYMENT" | "NOTICE" | "OTHER"
+  description String    @db.Text
+  dueDate     DateTime? @map("due_date") // nullable: le LLM n'invente jamais de date
+  status      String    @default("pending") // "pending" | "done" | "dismissed"
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  document    Document  @relation(fields: [documentId], references: [id])
+
+  @@map("obligations")
+}
+
+model Notification {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @map("user_id")
+  documentId Int?      @map("document_id")
+  type       String    // "RENEWAL_DUE" | "PAYMENT_DUE" | "CLAUSE_SUGGESTED"
+  message    String    @db.Text
+  read       Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user       User      @relation(fields: [userId], references: [id])
+  document   Document? @relation(fields: [documentId], references: [id])
+
+  @@map("notifications")
+}

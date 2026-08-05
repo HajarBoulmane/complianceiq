@@ -12,7 +12,7 @@ import {
   Tooltip,
 } from "recharts";
 import { analyzeContract, getDocumentAnalysis, mapDocumentToAnalysis } from "../api/compliance";
-import type { ContractAnalysis } from "../api/compliance";
+import type { ContractAnalysis, Severity } from "../api/compliance";
 import { extractTextFromPdf } from "../utils/pdfExtract";
 import AppLayout from "../components/Layout";
 import {
@@ -24,6 +24,12 @@ import {
   Upload,
   FileText,
   X,
+  Copy,
+  Check,
+  ShieldAlert,
+  ListChecks,
+  Layers,
+  FileEdit,
 } from "lucide-react";
 
 type SeverityStyle = {
@@ -65,6 +71,21 @@ const SEVERITY_STYLES: Record<string, SeverityStyle> = {
   },
 };
 
+const SEVERITY_HEX: Record<Severity, string> = {
+  CRITICAL: "#DC2626",
+  HIGH: "#F97316",
+  MEDIUM: "#F59E0B",
+  LOW: "#94A3B8",
+};
+
+const SEVERITY_ORDER: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
+const TOOLTIP_STYLE = {
+  backgroundColor: "#FFFFFF",
+  border: "1px solid #E2E8F0",
+  borderRadius: 8,
+};
+
 function scoreColor(score: number) {
   if (score < 40) return "#EF4444";
   if (score < 70) return "#F59E0B";
@@ -79,6 +100,7 @@ export default function Analyze() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ContractAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [searchParams] = useSearchParams();
@@ -183,6 +205,16 @@ export default function Analyze() {
     navigate("/analyze");
   };
 
+  const handleCopy = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex((cur) => (cur === index ? null : cur)), 2000);
+    } catch (err) {
+      console.error("Erreur copie:", err);
+    }
+  };
+
   const donutData = result
     ? [
         { name: "Score", value: result.score_global },
@@ -195,6 +227,53 @@ export default function Analyze() {
         const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
         return order[a.severite] - order[b.severite];
       })
+    : [];
+
+  const severityData = result
+    ? SEVERITY_ORDER.map((sev) => ({
+        name: SEVERITY_STYLES[sev].label,
+        severity: sev,
+        value: result.risques.filter((r) => r.severite === sev).length,
+      })).filter((d) => d.value > 0)
+    : [];
+
+  const criticalCount = result ? result.risques.filter((r) => r.severite === "CRITICAL").length : 0;
+  const categoriesAtRiskCount = result ? result.categories.filter((c) => c.score < 40).length : 0;
+  const suggestionsCount = result ? result.risques.filter((r) => r.clause_suggeree).length : 0;
+
+  const kpiCards = result
+    ? [
+        {
+          label: "Risques critiques",
+          value: criticalCount,
+          icon: ShieldAlert,
+          color: criticalCount > 0 ? "from-red-500 to-red-600" : "from-slate-400 to-slate-500",
+        },
+        {
+          label: "Clauses manquantes",
+          value: result.clauses_manquantes.length,
+          icon: FileWarning,
+          color:
+            result.clauses_manquantes.length > 0
+              ? "from-orange-500 to-orange-600"
+              : "from-slate-400 to-slate-500",
+        },
+        {
+          label: "Catégories à risque",
+          value: `${categoriesAtRiskCount}/${result.categories.length}`,
+          icon: Layers,
+          color:
+            categoriesAtRiskCount > 0
+              ? "from-amber-500 to-amber-600"
+              : "from-slate-400 to-slate-500",
+        },
+        {
+          label: "Reformulations suggérées",
+          value: suggestionsCount,
+          icon: FileEdit,
+          color: "from-violet-500 to-violet-600",
+        },
+      ]
     : [];
 
   return (
@@ -378,36 +457,91 @@ export default function Analyze() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm overflow-x-auto">
-              <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                Scores par catégorie
-              </p>
-              <div className="min-w-[320px]">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={result.categories} layout="vertical" margin={{ left: 20 }}>
-                    <XAxis type="number" domain={[0, 100]} hide />
-                    <YAxis
-                      type="category"
-                      dataKey="nom"
-                      width={140}
-                      tick={{ fill: "#94A3B8", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#FFFFFF",
-                        border: "1px solid #E2E8F0",
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={18}>
-                      {result.categories.map((cat, i) => (
-                        <Cell key={i} fill={scoreColor(cat.score)} />
+            {/* KPI row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              {kpiCards.map((card, i) => (
+                <div
+                  key={i}
+                  className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-5 text-white shadow-sm`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-white/80 text-xs">{card.label}</p>
+                    <card.icon size={16} className="text-white/60" />
+                  </div>
+                  <p className="font-heading text-xl md:text-2xl font-bold">{card.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm overflow-x-auto">
+                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
+                  Scores par catégorie
+                </p>
+                <div className="min-w-[280px]">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={result.categories} layout="vertical" margin={{ left: 20 }}>
+                      <XAxis type="number" domain={[0, 100]} hide />
+                      <YAxis
+                        type="category"
+                        dataKey="nom"
+                        width={140}
+                        tick={{ fill: "#94A3B8", fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip contentStyle={TOOLTIP_STYLE} />
+                      <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={18}>
+                        {result.categories.map((cat, i) => (
+                          <Cell key={i} fill={scoreColor(cat.score)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm">
+                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
+                  Répartition des risques par sévérité
+                </p>
+                {severityData.length > 0 ? (
+                  <div className="flex items-center gap-4">
+                    <ResponsiveContainer width={130} height={130}>
+                      <PieChart>
+                        <Pie
+                          data={severityData}
+                          dataKey="value"
+                          innerRadius={38}
+                          outerRadius={58}
+                          stroke="none"
+                        >
+                          {severityData.map((d, i) => (
+                            <Cell key={i} fill={SEVERITY_HEX[d.severity]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={TOOLTIP_STYLE} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="space-y-1.5 flex-1">
+                      {severityData.map((d, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: SEVERITY_HEX[d.severity] }}
+                          />
+                          <span className="text-slate-500 dark:text-slate-400 flex-1">{d.name}</span>
+                          <span className="text-slate-900 dark:text-white font-medium">{d.value}</span>
+                        </div>
                       ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm">
+                    <ListChecks size={16} />
+                    Aucun risque identifié dans ce contrat
+                  </div>
+                )}
               </div>
             </div>
 
@@ -462,6 +596,33 @@ export default function Analyze() {
                             <p className="text-slate-400 text-xs mt-1">
                               Réf: {risque.reference_legale}
                             </p>
+                          )}
+                          {risque.clause_suggeree && (
+                            <div className="mt-2 bg-white/60 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg p-3">
+                              <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <p className="text-slate-400 text-[10px] uppercase tracking-wide">
+                                  Reformulation conforme suggérée
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopy(risque.clause_suggeree!, i)}
+                                  className="flex items-center gap-1 text-xs font-medium text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition shrink-0"
+                                >
+                                  {copiedIndex === i ? (
+                                    <>
+                                      <Check size={12} /> Copié
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy size={12} /> Copier
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
+                                {risque.clause_suggeree}
+                              </p>
+                            </div>
                           )}
                         </div>
                       </div>

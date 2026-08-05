@@ -10,6 +10,9 @@ import {
   getDocument,
   getStats,
   deleteConversation,
+  listObligations,
+  listNotifications,
+  markNotificationAsRead,
 } from "../controllers/compliance.controller";
 
 const router = Router();
@@ -24,5 +27,8 @@ router.get("/documents", authenticate, listDocuments);
 router.get("/documents/:id", authenticate, getDocument);
 router.get("/stats", authenticate, getStats);
 router.delete("/conversations/:id", authenticate, deleteConversation);
+router.get("/obligations", authenticate, listObligations);
+router.get("/notifications", authenticate, listNotifications);
+router.patch("/notifications/:id/read", authenticate, markNotificationAsRead);
 
 export default router;

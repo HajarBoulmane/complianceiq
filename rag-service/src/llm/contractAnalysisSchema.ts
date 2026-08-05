@@ -20,6 +20,13 @@ export const CategoryKeySchema = z.enum([
   "rgpd_compliance",
 ]);
 
+export const ObligationTypeSchema = z.enum([
+  "RENEWAL",
+  "PAYMENT",
+  "NOTICE",
+  "OTHER",
+]);
+
 const CategorySchema = z.object({
   nom: z.string().min(1),
   cle: CategoryKeySchema,
@@ -33,6 +40,21 @@ const RiskSchema = z.object({
   categorie: CategoryKeySchema,
   description: z.string().min(1),
   reference_legale: z.string().min(1).optional(),
+  // NOUVEAU : reformulation conforme de la clause, uniquement si un risque
+  // a été identifié — jamais générée pour une clause déjà correcte.
+  clause_suggeree: z.string().min(1).optional(),
+});
+
+// NOUVEAU : obligations extraites du contrat (échéances à surveiller).
+// date_echeance est optionnelle : le LLM ne doit JAMAIS inventer une date,
+// seulement en fournir une si le texte du contrat permet de la déterminer.
+const ObligationSchema = z.object({
+  type: ObligationTypeSchema,
+  description: z.string().min(1),
+  date_echeance: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format attendu: YYYY-MM-DD")
+    .optional(),
 });
 
 export const ContractAnalysisSchema = z
@@ -43,6 +65,7 @@ export const ContractAnalysisSchema = z
     categories: z.array(CategorySchema).length(6),
     clauses_manquantes: z.array(z.string()),
     risques: z.array(RiskSchema),
+    obligations: z.array(ObligationSchema),
     resume: z.string().min(1),
   })
   // Règle métier tirée du prompt : une catégorie avec un risque CRITICAL

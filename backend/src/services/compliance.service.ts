@@ -93,39 +93,122 @@ export async function analyzeContractText(contractText: string) {
   return response.json();
 }
 
-export async function analyzeAndSave(userId: number, contractText: string, filename?: string) {
+// Parse "YYYY-MM-DD" from the LLM safely — never trust it blindly,
+// an invalid/impossible date should become "no date" not a crash.
+function parseObligationDate(dateStr?: string): Date | null {
+  if (!dateStr) return null;
+  const parsed = new Date(dateStr);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export async function analyzeAndSave(
+  userId: number,
+  contractText: string,
+  filename?: string
+) {
+  // La partie coûteuse (appel LLM) reste HORS de la transaction —
+  // on ne veut pas garder une transaction DB ouverte pendant plusieurs secondes.
   const { analysis } = await analyzeContractText(contractText);
 
-  const document = await prisma.document.create({
-    data: {
-      userId,
-      filename: filename || null,
-      contractText,
-      status: "processed",
-    },
-  });
+  const { document, obligations, hasSuggestedClauses } = await prisma.$transaction(
+    async (tx) => {
+      const document = await tx.document.create({
+        data: {
+          userId,
+          filename: filename || null,
+          contractText,
+          status: "processed",
+        },
+      });
 
-await prisma.analysis.create({
-  data: {
-    documentId: document.id,
-    scoreGlobal: analysis.score_global,
-    resume: analysis.resume,
-    categories: analysis.categories,
-    clausesManquantes: analysis.clauses_manquantes,
-    typeContrat: analysis.type_contrat,
-    typeContratLabel: analysis.type_contrat_label,
-    findings: {
-      create: analysis.risques.map((r: any) => ({
-        clause: r.clause,
-        severite: r.severite,
-        categorie: r.categorie,
-        description: r.description,
-        referenceLegale: r.reference_legale || null,
-      })),
-    },
-  },
-});
-  return { documentId: document.id, analysis };
+      await tx.analysis.create({
+        data: {
+          documentId: document.id,
+          scoreGlobal: analysis.score_global,
+          resume: analysis.resume,
+          categories: analysis.categories,
+          clausesManquantes: analysis.clauses_manquantes,
+          typeContrat: analysis.type_contrat,
+          typeContratLabel: analysis.type_contrat_label,
+          findings: {
+            create: analysis.risques.map((r: any) => ({
+              clause: r.clause,
+              severite: r.severite,
+              categorie: r.categorie,
+              description: r.description,
+              referenceLegale: r.reference_legale || null,
+              suggestedClause: r.clause_suggeree || null,
+            })),
+          },
+        },
+      });
+
+      // Obligations : on garde celles sans date aussi (dueDate nullable),
+      // on ne les jette pas juste parce que le LLM n'a pas trouvé de date.
+      const obligationsData = (analysis.obligations || []).map((o: any) => ({
+        documentId: document.id,
+        type: o.type,
+        description: o.description,
+        dueDate: parseObligationDate(o.date_echeance),
+      }));
+
+      let createdObligations: { id: number; dueDate: Date | null; type: string }[] = [];
+      if (obligationsData.length > 0) {
+        await tx.obligation.createMany({ data: obligationsData });
+        createdObligations = await tx.obligation.findMany({
+          where: { documentId: document.id },
+          select: { id: true, dueDate: true, type: true },
+        });
+      }
+
+      const hasSuggestedClauses = analysis.risques.some((r: any) => r.clause_suggeree);
+
+      // Notifications : une par obligation datée, plus une si des clauses
+      // suggérées existent — générées ici, pas dans un job séparé pour l'instant.
+      const notificationsData: {
+        userId: number;
+        documentId: number;
+        type: string;
+        message: string;
+      }[] = [];
+
+      for (const ob of createdObligations) {
+        if (ob.dueDate) {
+          notificationsData.push({
+            userId,
+            documentId: document.id,
+            type: ob.type === "PAYMENT" ? "PAYMENT_DUE" : "RENEWAL_DUE",
+            message: `Échéance à venir (${ob.type}) le ${ob.dueDate.toISOString().slice(0, 10)} pour ${
+              filename || "un contrat"
+            }`,
+          });
+        }
+      }
+
+      if (hasSuggestedClauses) {
+        notificationsData.push({
+          userId,
+          documentId: document.id,
+          type: "CLAUSE_SUGGESTED",
+          message: `Des reformulations de clauses conformes sont disponibles pour ${
+            filename || "un contrat"
+          }`,
+        });
+      }
+
+      if (notificationsData.length > 0) {
+        await tx.notification.createMany({ data: notificationsData });
+      }
+
+      return {
+        document,
+        obligations: createdObligations,
+        hasSuggestedClauses,
+      };
+    }
+  );
+
+  return { documentId: document.id, analysis, obligations, hasSuggestedClauses };
 }
 
 export async function getConversations(userId: number) {
@@ -156,10 +239,47 @@ export async function getDocuments(userId: number) {
 export async function getDocumentAnalysis(userId: number, documentId: number) {
   const document = await prisma.document.findFirst({
     where: { id: documentId, userId },
-    include: { analysis: { include: { findings: true } } },
+    include: { analysis: { include: { findings: true } }, obligations: true },
   });
   if (!document) throw new Error("DOCUMENT_NOT_FOUND");
   return document;
+}
+
+// NOUVEAU : obligations à venir, tous documents confondus, pour le dashboard.
+export async function getUpcomingObligations(userId: number, withinDays = 30) {
+  const now = new Date();
+  const limit = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+
+  return prisma.obligation.findMany({
+    where: {
+      status: "pending",
+      dueDate: { not: null, gte: now, lte: limit },
+      document: { userId },
+    },
+    include: { document: { select: { filename: true } } },
+    orderBy: { dueDate: "asc" },
+  });
+}
+
+// NOUVEAU : notifications pour le header (cloche).
+export async function getNotifications(userId: number, unreadOnly = false) {
+  return prisma.notification.findMany({
+    where: { userId, ...(unreadOnly ? { read: false } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+}
+
+export async function markNotificationRead(userId: number, notificationId: number) {
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, userId },
+  });
+  if (!notification) throw new Error("NOTIFICATION_NOT_FOUND");
+
+  return prisma.notification.update({
+    where: { id: notificationId },
+    data: { read: true },
+  });
 }
 
 export async function getDashboardStats(userId: number) {
@@ -186,7 +306,6 @@ export async function getDashboardStats(userId: number) {
   const risqueCount = analyzedDocs.filter((d) => (d.analysis?.scoreGlobal || 0) < 40).length;
   const moyenCount = totalDocuments - conformeCount - risqueCount;
 
-  // Activité par mois (12 derniers mois)
   const now = new Date();
   const monthlyActivity: { month: string; count: number }[] = [];
   for (let i = 11; i >= 0; i--) {
@@ -199,7 +318,6 @@ export async function getDashboardStats(userId: number) {
     monthlyActivity.push({ month: monthKey, count });
   }
 
-  // Agrégation par catégorie réglementaire
   const categoryTotals: Record<string, { totalScore: number; totalProblemes: number; count: number }> = {};
   analyzedDocs.forEach((doc) => {
     const categories = (doc.analysis?.categories as any[]) || [];
@@ -218,7 +336,6 @@ export async function getDashboardStats(userId: number) {
     nb_problemes: v.totalProblemes,
   }));
 
-  // 5 derniers documents analysés
   const recentDocuments = analyzedDocs.slice(0, 5).map((d) => ({
     id: d.id,
     filename: d.filename,
@@ -227,21 +344,20 @@ export async function getDashboardStats(userId: number) {
   }));
 
   // 5 risques haute sévérité les plus récents (tous documents confondus)
- 
+    // Les valeurs persistées sont "CRITICAL" ou "HIGH".
+    const allHighRisks = analyzedDocs
+      .flatMap((d) =>
+        (d.analysis?.findings || [])
+          .filter((f) => f.severite === "CRITICAL" || f.severite === "HIGH")
+          ...f,
+          documentId: d.id,
+          documentFilename: d.filename,
+          createdAt: d.analysis?.createdAt,
+        }))
+    )
+    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+    .slice(0, 5);
 
-const allHighRisks = analyzedDocs
-  .flatMap((d) =>
-    (d.analysis?.findings || [])
-      .filter((f) => f.severite === "CRITICAL" || f.severite === "HIGH")
-      .map((f) => ({
-        ...f,
-        documentId: d.id,
-        documentFilename: d.filename,
-        createdAt: d.analysis?.createdAt,
-      }))
-  )
-  .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-  .slice(0, 5);
   return {
     totalDocuments,
     conversationsCount,
@@ -255,6 +371,7 @@ const allHighRisks = analyzedDocs
     recentHighRisks: allHighRisks,
   };
 }
+
 export async function deleteConversation(userId: number, conversationId: number) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, userId },

@@ -40,14 +40,13 @@ const RiskSchema = z.object({
   categorie: CategoryKeySchema,
   description: z.string().min(1),
   reference_legale: z.string().min(1).optional(),
-  // NOUVEAU : reformulation conforme de la clause, uniquement si un risque
-  // a été identifié — jamais générée pour une clause déjà correcte.
   clause_suggeree: z.string().min(1).optional(),
+  // Posé uniquement par groundReferences() après coup, jamais par le LLM —
+  // signale une reference_legale retirée car non retrouvée dans le contexte
+  // légal récupéré (hallucination probable).
+  referenceHallucinated: z.boolean().optional(),
 });
 
-// NOUVEAU : obligations extraites du contrat (échéances à surveiller).
-// date_echeance est optionnelle : le LLM ne doit JAMAIS inventer une date,
-// seulement en fournir une si le texte du contrat permet de la déterminer.
 const ObligationSchema = z.object({
   type: ObligationTypeSchema,
   description: z.string().min(1),
@@ -67,10 +66,10 @@ export const ContractAnalysisSchema = z
     risques: z.array(RiskSchema),
     obligations: z.array(ObligationSchema),
     resume: z.string().min(1),
+    // Jamais posé par le LLM — uniquement par buildFallbackAnalysis quand
+    // les 2 tentatives de validation ont échoué.
+    analysis_degraded: z.boolean().optional(),
   })
-  // Règle métier tirée du prompt : une catégorie avec un risque CRITICAL
-  // ne peut pas avoir un score > 40. On la fait respecter, pas juste espérer
-  // que le LLM l'ait suivie.
   .superRefine((data, ctx) => {
     for (const cat of data.categories) {
       const hasCritical = data.risques.some(

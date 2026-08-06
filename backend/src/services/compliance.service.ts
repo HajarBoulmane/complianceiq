@@ -14,7 +14,7 @@ export interface RagAnswer {
 
 export async function askComplianceQuestion(
   question: string,
-  topK?: number
+  topK?: number,
 ): Promise<RagAnswer> {
   const response = await fetch(`${RAG_SERVICE_URL}/api/rag/query`, {
     method: "POST",
@@ -34,7 +34,7 @@ export async function askAndSave(
   userId: number,
   question: string,
   conversationId?: number,
-  topK?: number
+  topK?: number,
 ) {
   const result = await askComplianceQuestion(question, topK);
 
@@ -104,14 +104,14 @@ function parseObligationDate(dateStr?: string): Date | null {
 export async function analyzeAndSave(
   userId: number,
   contractText: string,
-  filename?: string
+  filename?: string,
 ) {
   // La partie coûteuse (appel LLM) reste HORS de la transaction —
   // on ne veut pas garder une transaction DB ouverte pendant plusieurs secondes.
   const { analysis } = await analyzeContractText(contractText);
 
-  const { document, obligations, hasSuggestedClauses } = await prisma.$transaction(
-    async (tx) => {
+  const { document, obligations, hasSuggestedClauses } =
+    await prisma.$transaction(async (tx) => {
       const document = await tx.document.create({
         data: {
           userId,
@@ -121,28 +121,29 @@ export async function analyzeAndSave(
         },
       });
 
-      await tx.analysis.create({
-        data: {
-          documentId: document.id,
-          scoreGlobal: analysis.score_global,
-          resume: analysis.resume,
-          categories: analysis.categories,
-          clausesManquantes: analysis.clauses_manquantes,
-          typeContrat: analysis.type_contrat,
-          typeContratLabel: analysis.type_contrat_label,
-          findings: {
-            create: analysis.risques.map((r: any) => ({
-              clause: r.clause,
-              severite: r.severite,
-              categorie: r.categorie,
-              description: r.description,
-              referenceLegale: r.reference_legale || null,
-              suggestedClause: r.clause_suggeree || null,
-            })),
-          },
-        },
-      });
-
+     await tx.analysis.create({
+  data: {
+    documentId: document.id,
+    scoreGlobal: analysis.score_global,
+    resume: analysis.resume,
+    categories: analysis.categories,
+    clausesManquantes: analysis.clauses_manquantes,
+    typeContrat: analysis.type_contrat,
+    typeContratLabel: analysis.type_contrat_label,
+    analysisDegraded: analysis.analysis_degraded === true,
+    findings: {
+      create: analysis.risques.map((r: any) => ({
+        clause: r.clause,
+        severite: r.severite,
+        categorie: r.categorie,
+        description: r.description,
+        referenceLegale: r.reference_legale || null,
+        suggestedClause: r.clause_suggeree || null,
+        referenceHallucinated: r.referenceHallucinated === true,
+      })),
+    },
+  },
+});
       // Obligations : on garde celles sans date aussi (dueDate nullable),
       // on ne les jette pas juste parce que le LLM n'a pas trouvé de date.
       const obligationsData = (analysis.obligations || []).map((o: any) => ({
@@ -152,7 +153,11 @@ export async function analyzeAndSave(
         dueDate: parseObligationDate(o.date_echeance),
       }));
 
-      let createdObligations: { id: number; dueDate: Date | null; type: string }[] = [];
+      let createdObligations: {
+        id: number;
+        dueDate: Date | null;
+        type: string;
+      }[] = [];
       if (obligationsData.length > 0) {
         await tx.obligation.createMany({ data: obligationsData });
         createdObligations = await tx.obligation.findMany({
@@ -161,7 +166,9 @@ export async function analyzeAndSave(
         });
       }
 
-      const hasSuggestedClauses = analysis.risques.some((r: any) => r.clause_suggeree);
+      const hasSuggestedClauses = analysis.risques.some(
+        (r: any) => r.clause_suggeree,
+      );
 
       // Notifications : une par obligation datée, plus une si des clauses
       // suggérées existent — générées ici, pas dans un job séparé pour l'instant.
@@ -205,10 +212,17 @@ export async function analyzeAndSave(
         obligations: createdObligations,
         hasSuggestedClauses,
       };
-    }
-  );
+    });
 
-  return { documentId: document.id, analysis, obligations, hasSuggestedClauses };
+  return {
+    documentId: document.id,
+    analysis,
+    obligations,
+    hasSuggestedClauses,
+    // Signal de dégradation (voir ContractAnalysisResult.analysis_degraded côté rag-service):
+    // true si la réponse vient du fallback (LLM/validation a échoué 2x), pas d'une vraie analyse.
+    analysisDegraded: analysis.analysis_degraded === true,
+  };
 }
 
 export async function getConversations(userId: number) {
@@ -219,7 +233,10 @@ export async function getConversations(userId: number) {
   });
 }
 
-export async function getConversationMessages(userId: number, conversationId: number) {
+export async function getConversationMessages(
+  userId: number,
+  conversationId: number,
+) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, userId },
     include: { messages: { orderBy: { createdAt: "asc" } } },
@@ -270,7 +287,10 @@ export async function getNotifications(userId: number, unreadOnly = false) {
   });
 }
 
-export async function markNotificationRead(userId: number, notificationId: number) {
+export async function markNotificationRead(
+  userId: number,
+  notificationId: number,
+) {
   const notification = await prisma.notification.findFirst({
     where: { id: notificationId, userId },
   });
@@ -289,7 +309,9 @@ export async function getDashboardStats(userId: number) {
     orderBy: { createdAt: "desc" },
   });
 
-  const conversationsCount = await prisma.conversation.count({ where: { userId } });
+  const conversationsCount = await prisma.conversation.count({
+    where: { userId },
+  });
 
   const analyzedDocs = documents.filter((d) => d.analysis);
   const totalDocuments = analyzedDocs.length;
@@ -297,13 +319,19 @@ export async function getDashboardStats(userId: number) {
   const avgScore =
     totalDocuments > 0
       ? Math.round(
-          analyzedDocs.reduce((sum, d) => sum + (d.analysis?.scoreGlobal || 0), 0) /
-            totalDocuments
+          analyzedDocs.reduce(
+            (sum, d) => sum + (d.analysis?.scoreGlobal || 0),
+            0,
+          ) / totalDocuments,
         )
       : 0;
 
-  const conformeCount = analyzedDocs.filter((d) => (d.analysis?.scoreGlobal || 0) >= 70).length;
-  const risqueCount = analyzedDocs.filter((d) => (d.analysis?.scoreGlobal || 0) < 40).length;
+  const conformeCount = analyzedDocs.filter(
+    (d) => (d.analysis?.scoreGlobal || 0) >= 70,
+  ).length;
+  const risqueCount = analyzedDocs.filter(
+    (d) => (d.analysis?.scoreGlobal || 0) < 40,
+  ).length;
   const moyenCount = totalDocuments - conformeCount - risqueCount;
 
   const now = new Date();
@@ -313,17 +341,27 @@ export async function getDashboardStats(userId: number) {
     const monthKey = d.toLocaleDateString("fr-FR", { month: "short" });
     const count = analyzedDocs.filter((doc) => {
       const docDate = new Date(doc.createdAt);
-      return docDate.getFullYear() === d.getFullYear() && docDate.getMonth() === d.getMonth();
+      return (
+        docDate.getFullYear() === d.getFullYear() &&
+        docDate.getMonth() === d.getMonth()
+      );
     }).length;
     monthlyActivity.push({ month: monthKey, count });
   }
 
-  const categoryTotals: Record<string, { totalScore: number; totalProblemes: number; count: number }> = {};
+  const categoryTotals: Record<
+    string,
+    { totalScore: number; totalProblemes: number; count: number }
+  > = {};
   analyzedDocs.forEach((doc) => {
     const categories = (doc.analysis?.categories as any[]) || [];
     categories.forEach((cat) => {
       if (!categoryTotals[cat.nom]) {
-        categoryTotals[cat.nom] = { totalScore: 0, totalProblemes: 0, count: 0 };
+        categoryTotals[cat.nom] = {
+          totalScore: 0,
+          totalProblemes: 0,
+          count: 0,
+        };
       }
       categoryTotals[cat.nom].totalScore += cat.score;
       categoryTotals[cat.nom].totalProblemes += cat.nb_problemes;
@@ -354,9 +392,12 @@ export async function getDashboardStats(userId: number) {
           documentId: d.id,
           documentFilename: d.filename,
           createdAt: d.analysis?.createdAt,
-        }))
+        })),
     )
-    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime(),
+    )
     .slice(0, 5);
 
   return {
@@ -373,7 +414,10 @@ export async function getDashboardStats(userId: number) {
   };
 }
 
-export async function deleteConversation(userId: number, conversationId: number) {
+export async function deleteConversation(
+  userId: number,
+  conversationId: number,
+) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, userId },
   });

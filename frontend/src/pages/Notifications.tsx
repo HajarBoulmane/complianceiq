@@ -3,38 +3,31 @@ import { Link } from "react-router-dom";
 import AppLayout from "../components/Layout";
 import { getNotifications, markNotificationRead } from "../api/compliance";
 import type { NotificationItem } from "../api/compliance";
-import { CalendarClock, CreditCard, FileEdit, Bell, Check } from "lucide-react";
+import {
+ 
+  Check,
+  ArrowRight,
+  Clock,
+  FileText,
+} from "lucide-react";
 
-const TYPE_CONFIG: Record<
-  NotificationItem["type"],
-  { icon: typeof Bell; color: string; bg: string }
-> = {
-  RENEWAL_DUE: {
-    icon: CalendarClock,
-    color: "text-violet-500",
-    bg: "bg-violet-50 dark:bg-violet-500/10",
-  },
-  PAYMENT_DUE: {
-    icon: CreditCard,
-    color: "text-orange-500",
-    bg: "bg-orange-50 dark:bg-orange-500/10",
-  },
-  CLAUSE_SUGGESTED: {
-    icon: FileEdit,
-    color: "text-pink-500",
-    bg: "bg-pink-50 dark:bg-pink-500/10",
-  },
-};
+/* ── Minimal accent ── */
+
 
 function timeAgo(dateStr: string) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "à l'instant";
-  if (mins < 60) return `il y a ${mins} min`;
+  if (mins < 1) return "À l'instant";
+  if (mins < 60) return `Il y a ${mins} min`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `il y a ${hours}h`;
+  if (hours < 24) return `Il y a ${hours} h`;
   const days = Math.floor(hours / 24);
-  return `il y a ${days}j`;
+  if (days === 1) return "Hier";
+  if (days < 7) return `Il y a ${days} jours`;
+  return new Date(dateStr).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 export default function Notifications() {
@@ -57,7 +50,9 @@ export default function Notifications() {
   }, [filter]);
 
   const handleMarkRead = async (id: number) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
     try {
       await markNotificationRead(id);
     } catch (err) {
@@ -67,110 +62,178 @@ export default function Notifications() {
     }
   };
 
+  const handleMarkAllRead = async () => {
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    try {
+      await Promise.all(unreadIds.map((id) => markNotificationRead(id)));
+    } catch (err) {
+      console.error("Erreur marquage notifications:", err);
+      const res = await getNotifications(filter === "unread");
+      setNotifications(res.notifications);
+    }
+  };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto px-1">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
-            <Bell className="text-pink-500" size={20} />
+      <div className="max-w-2xl mx-auto">
+        {/* Header — clean, no icon blob */}
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
+              Notifications
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              {unreadCount > 0
+                ? `${unreadCount} non lue${unreadCount > 1 ? "s" : ""}`
+                : "Tout est à jour"}
+            </p>
           </div>
-          <h1 className="font-heading text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
-            Notifications
-          </h1>
-        </div>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
-          Échéances, renouvellements et reformulations de clauses détectées automatiquement
-        </p>
 
-        <div className="flex gap-2 mb-5">
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition pb-0.5"
+            >
+              Tout marquer comme lu
+            </button>
+          )}
+        </div>
+
+        {/* Filters — minimal pill tabs */}
+        <div className="flex gap-1 mb-6 border-b border-slate-100 dark:border-white/5 pb-px">
           <button
             onClick={() => setFilter("all")}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+            className={`px-3 py-2 text-sm font-medium transition relative ${
               filter === "all"
-                ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                : "bg-white dark:bg-[#1A1420] border border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "text-slate-900 dark:text-white"
+                : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             }`}
           >
             Toutes
+            {filter === "all" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 dark:bg-white rounded-full" />
+            )}
           </button>
           <button
             onClick={() => setFilter("unread")}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${
+            className={`px-3 py-2 text-sm font-medium transition relative ${
               filter === "unread"
-                ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                : "bg-white dark:bg-[#1A1420] border border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "text-slate-900 dark:text-white"
+                : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             }`}
           >
             Non lues
             {unreadCount > 0 && filter !== "unread" && (
-              <span className="bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+              <span className="ml-1.5 text-[10px] text-slate-400">
                 {unreadCount}
               </span>
+            )}
+            {filter === "unread" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 dark:bg-white rounded-full" />
             )}
           </button>
         </div>
 
+        {/* Loading skeleton */}
         {loading && (
-          <div className="flex items-center gap-3 text-slate-400 text-sm">
-            <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-            Chargement...
+          <div className="space-y-1">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-4 py-4 px-1 animate-pulse"
+              >
+                <div className="w-2 h-2 rounded-full bg-slate-100 dark:bg-white/5 mt-2 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-slate-100 dark:bg-white/5 rounded w-3/4" />
+                  <div className="h-3 bg-slate-100 dark:bg-white/5 rounded w-1/4" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
+        {/* Empty state — no icons, just typography */}
         {!loading && notifications.length === 0 && (
-          <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-8 text-center shadow-sm">
-            <Bell className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={28} />
-            <p className="text-slate-400 text-sm">
-              {filter === "unread" ? "Aucune notification non lue" : "Aucune notification pour l'instant"}
+          <div className="py-20 text-center">
+            <p className="text-slate-900 dark:text-white font-medium text-sm">
+              {filter === "unread"
+                ? "Aucune notification non lue"
+                : "Aucune notification"}
+            </p>
+            <p className="text-slate-400 text-xs mt-1">
+              {filter === "unread"
+                ? "Vous avez tout lu."
+                : "Les alertes apparaîtront ici."}
             </p>
           </div>
         )}
 
+        {/* Notification list — minimal, text-driven */}
         {!loading && notifications.length > 0 && (
-          <div className="space-y-2">
-            {notifications.map((n) => {
-              const config = TYPE_CONFIG[n.type] || TYPE_CONFIG.CLAUSE_SUGGESTED;
-              const Icon = config.icon;
-              return (
-                <div
-                  key={n.id}
-                  className={`flex items-start gap-3 rounded-xl p-4 shadow-sm transition ${
-                    n.read
-                      ? "bg-white dark:bg-[#1A1420] opacity-70"
-                      : "bg-white dark:bg-[#1A1420] border-l-4 border-pink-500"
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-lg ${config.bg} flex items-center justify-center shrink-0`}>
-                    <Icon size={16} className={config.color} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-slate-700 dark:text-slate-200 text-sm">{n.message}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <p className="text-slate-400 text-xs">{timeAgo(n.createdAt)}</p>
-                      {n.documentId && (
-                        <Link
-                          to={`/analyze?documentId=${n.documentId}`}
-                          className="text-pink-600 dark:text-pink-400 text-xs font-medium hover:underline"
-                        >
-                          Voir le contrat
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                  {!n.read && (
-                    <button
-                      onClick={() => handleMarkRead(n.id)}
-                      title="Marquer comme lu"
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-pink-500 transition shrink-0"
-                    >
-                      <Check size={16} />
-                    </button>
-                  )}
+          <div className="divide-y divide-slate-50 dark:divide-white/[0.04]">
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                className={`group flex items-start gap-4 py-4 px-1 -mx-1 rounded-xl transition ${
+                  n.read
+                    ? "opacity-50 hover:opacity-100"
+                    : "hover:bg-slate-50 dark:hover:bg-white/[0.02]"
+                }`}
+              >
+                {/* Unread dot — tiny, subtle */}
+                <div className="shrink-0 pt-2">
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      n.read ? "bg-transparent" : "bg-pink-500"
+                    }`}
+                  />
                 </div>
-              );
-            })}
+
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm leading-relaxed ${
+                      n.read
+                        ? "text-slate-500 dark:text-slate-400"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    {n.message}
+                  </p>
+
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-[11px] text-slate-400 tabular-nums flex items-center gap-1">
+                      <Clock size={10} />
+                      {timeAgo(n.createdAt)}
+                    </span>
+
+                    {n.documentId && (
+                      <Link
+                        to={`/analyze?documentId=${n.documentId}`}
+                        className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-pink-600 dark:hover:text-pink-400 transition flex items-center gap-0.5"
+                      >
+                        <FileText size={10} />
+                        Contrat
+                        <ArrowRight size={10} />
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {!n.read && (
+                  <button
+                    onClick={() => handleMarkRead(n.id)}
+                    title="Marquer comme lu"
+                    className="shrink-0 p-1.5 text-slate-300 hover:text-slate-500 dark:hover:text-slate-300 transition opacity-0 group-hover:opacity-100"
+                  >
+                    <Check size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

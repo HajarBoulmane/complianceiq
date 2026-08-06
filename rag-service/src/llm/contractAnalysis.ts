@@ -35,6 +35,7 @@ export interface ContractAnalysisResult {
     description: string;
     reference_legale?: string;
     clause_suggeree?: string;
+    referenceHallucinated?: boolean;
   }[];
   obligations: {
     type: ObligationType;
@@ -42,9 +43,9 @@ export interface ContractAnalysisResult {
     date_echeance?: string;
   }[];
   resume: string;
+  analysis_degraded?: boolean;
 }
 
-// --- queries de retrieval par catégorie ---
 const CATEGORY_QUERIES: Record<string, string> = {
   liability:
     "responsabilité contractuelle limitation dommages indemnisation",
@@ -60,35 +61,54 @@ const CATEGORY_QUERIES: Record<string, string> = {
     "obligations RGPD Loi 09-08 protection des données personnelles consentement",
 };
 
-async function buildLegalContext(): Promise<string> {
+const MAX_CONTEXT_CHARS = 12000;
+const MAX_CONTRACT_CHARS = 20000;
+
+async function buildLegalContext(): Promise<{
+  context: string;
+  validSources: Set<string>;
+}> {
+  const results = await Promise.all(
+    Object.entries(CATEGORY_QUERIES).map(async ([categorie, query]) => {
+      try {
+        return await retrieveRelevantChunks(query, 3);
+      } catch (err) {
+        console.warn(
+          `[buildLegalContext] Retrieval échoué pour la catégorie "${categorie}":`,
+          err
+        );
+        return [];
+      }
+    })
+  );
+
   const allChunks: RetrievedChunk[] = [];
   const seen = new Set<string>();
-
-  for (const [categorie, query] of Object.entries(CATEGORY_QUERIES)) {
-    try {
-      const chunks = await retrieveRelevantChunks(query, 3);
-      for (const chunk of chunks) {
-        const key = `${chunk.sourceFile}-${chunk.chunkIndex}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          allChunks.push(chunk);
-        }
+  for (const chunks of results) {
+    for (const chunk of chunks) {
+      const key = `${chunk.sourceFile}-${chunk.chunkIndex}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        allChunks.push(chunk);
       }
-    } catch (err) {
-      console.warn(
-        `[buildLegalContext] Retrieval échoué pour la catégorie "${categorie}":`,
-        err
-      );
     }
   }
 
+  const validSources = new Set(allChunks.map((c) => c.sourceFile));
+
   if (allChunks.length === 0) {
-    return "(aucun contexte légal disponible)";
+    return { context: "(aucun contexte légal disponible)", validSources };
   }
 
-  return allChunks
+  let context = allChunks
     .map((c, i) => `[Source ${i + 1} — ${c.sourceFile}]\n${c.text}`)
     .join("\n\n");
+
+  if (context.length > MAX_CONTEXT_CHARS) {
+    context = context.slice(0, MAX_CONTEXT_CHARS) + "\n\n[...contexte tronqué...]";
+  }
+
+  return { context, validSources };
 }
 
 const ANALYSIS_PROMPT_TEMPLATE = (
@@ -228,9 +248,26 @@ function normalizeContractAnalysisPayload(value: unknown): unknown {
   return payload;
 }
 
+function groundReferences(
+  risques: ContractAnalysisValidated["risques"],
+  validSources: Set<string>
+): ContractAnalysisValidated["risques"] {
+  return risques.map((risque) => {
+    if (risque.reference_legale && !validSources.has(risque.reference_legale)) {
+      console.warn(
+        `[groundReferences] Référence non fondée retirée: "${risque.reference_legale}" (absente du contexte légal récupéré)`
+      );
+      const { reference_legale, ...rest } = risque;
+      return rest as ContractAnalysisValidated["risques"][number];
+    }
+    return risque;
+  });
+}
+
 async function callAndValidate(
   contractText: string,
-  legalContext: string
+  legalContext: string,
+  validSources: Set<string>
 ): Promise<
   | { ok: true; data: ContractAnalysisValidated }
   | { ok: false; rawResponse: string; error: string }
@@ -263,45 +300,56 @@ async function callAndValidate(
     };
   }
 
-  return { ok: true, data: result.data };
+  const grounded: ContractAnalysisValidated = {
+    ...result.data,
+    risques: groundReferences(result.data.risques, validSources),
+  };
+
+  return { ok: true, data: grounded };
 }
 
 function buildFallbackAnalysis(contractText: string): ContractAnalysisResult {
-  const text = (contractText || "").trim();
-  const typeContrat = text.length > 0 ? "autre" : "autre";
-
   return {
-    type_contrat: typeContrat,
+    type_contrat: "autre",
     type_contrat_label: "Contrat non classé",
-    score_global: 55,
+    score_global: 0,
     categories: [
-      { nom: "Responsabilité", cle: "liability", score: 100, nb_problemes: 0 },
-      { nom: "Résiliation", cle: "termination", score: 100, nb_problemes: 0 },
-      { nom: "Propriété intellectuelle & Confidentialité", cle: "ip_confidentiality", score: 100, nb_problemes: 0 },
-      { nom: "Résolution des litiges", cle: "dispute_resolution", score: 100, nb_problemes: 0 },
-      { nom: "Conditions de paiement", cle: "payment_terms", score: 100, nb_problemes: 0 },
-      { nom: "Conformité RGPD / Loi 09-08", cle: "rgpd_compliance", score: 100, nb_problemes: 0 },
+      { nom: "Responsabilité", cle: "liability", score: 0, nb_problemes: 0 },
+      { nom: "Résiliation", cle: "termination", score: 0, nb_problemes: 0 },
+      { nom: "Propriété intellectuelle & Confidentialité", cle: "ip_confidentiality", score: 0, nb_problemes: 0 },
+      { nom: "Résolution des litiges", cle: "dispute_resolution", score: 0, nb_problemes: 0 },
+      { nom: "Conditions de paiement", cle: "payment_terms", score: 0, nb_problemes: 0 },
+      { nom: "Conformité RGPD / Loi 09-08", cle: "rgpd_compliance", score: 0, nb_problemes: 0 },
     ],
     clauses_manquantes: [],
     risques: [],
     obligations: [],
     resume:
-      "L'analyse automatique n'a pas pu être validée de manière fiable. Le contrat a été conservé sans signalement de risque bloquant pour éviter un échec de traitement.",
+      "L'analyse automatique a échoué et n'a pas pu être validée. Ce résultat est un stub — aucun score ni risque réel n'a été calculé. Veuillez réessayer ou contacter le support.",
+    analysis_degraded: true,
   };
 }
 
 export async function analyzeContract(
   contractText: string
 ): Promise<ContractAnalysisResult> {
-  const legalContext = await buildLegalContext();
+  let boundedContractText = contractText;
+  if (contractText.length > MAX_CONTRACT_CHARS) {
+    console.warn(
+      `[analyzeContract] contrat tronqué de ${contractText.length} à ${MAX_CONTRACT_CHARS} caractères`
+    );
+    boundedContractText = contractText.slice(0, MAX_CONTRACT_CHARS);
+  }
 
-  let attempt = await callAndValidate(contractText, legalContext);
+  const { context: legalContext, validSources } = await buildLegalContext();
+
+  let attempt = await callAndValidate(boundedContractText, legalContext, validSources);
 
   if (!attempt.ok) {
     console.warn(
       `[analyzeContract] Validation échouée (tentative 1): ${attempt.error}. Nouvelle tentative...`
     );
-    attempt = await callAndValidate(contractText, legalContext);
+    attempt = await callAndValidate(boundedContractText, legalContext, validSources);
   }
 
   if (!attempt.ok) {

@@ -21,16 +21,16 @@ import {
 import { getDashboardStats, getUpcomingObligations } from "../api/compliance";
 import type { DashboardStats, Obligation } from "../api/compliance";
 import AppLayout from "../components/Layout";
-import {
-  AlertTriangle,
-  FileText,
-  Clock,
-  CalendarClock,
-  TrendingUp,
-} from "lucide-react";
 
 const DONUT_COLORS = ["#EC4899", "#8B5CF6", "#F97316"];
-const CATEGORY_COLORS = ["#EC4899", "#8B5CF6", "#F97316", "#3B82F6", "#F59E0B", "#22C55E"];
+const CATEGORY_COLORS = [
+  "#EC4899",
+  "#8B5CF6",
+  "#F97316",
+  "#3B82F6",
+  "#F59E0B",
+  "#22C55E",
+];
 const REVIEW_TIME_MINUTES_PER_DOC = 30;
 
 const OBLIGATION_LABELS: Record<string, string> = {
@@ -44,10 +44,16 @@ const TOOLTIP_STYLE = {
   backgroundColor: "#FFFFFF",
   border: "1px solid #E2E8F0",
   borderRadius: 8,
+  boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
 };
 
+const CARD =
+  "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.04]";
+
 function daysUntil(dueDate: string) {
-  return Math.ceil((new Date(dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return Math.ceil(
+    (new Date(dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
 }
 
 export default function Dashboard() {
@@ -92,298 +98,375 @@ export default function Dashboard() {
     ? [...stats.categoriesAvg].sort((a, b) => b.nb_problemes - a.nb_problemes)
     : [];
 
-  const statCards = stats
-    ? [
-        {
-          label: "Score moyen de conformité",
-          value: `${stats.avgScore}%`,
-          color: "from-blue-500 to-blue-600",
-          icon: TrendingUp,
-        },
-        {
-          label: "Contrats à risque élevé",
-          value: stats.risqueCount,
-          color: stats.risqueCount > 0 ? "from-red-500 to-red-600" : "from-slate-400 to-slate-500",
-          icon: AlertTriangle,
-        },
-        {
-          label: "Temps de révision économisé*",
-          value: `${hoursSaved}h`,
-          color: "from-violet-500 to-violet-600",
-          icon: Clock,
-        },
-        {
-          label: "Échéances urgentes (<14j)",
-          value: urgentObligationsCount,
-          color:
-            urgentObligationsCount > 0
-              ? "from-orange-500 to-orange-600"
-              : "from-slate-400 to-slate-500",
-          icon: CalendarClock,
-        },
-      ]
-    : [];
-
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {loading && (
-          <div className="flex items-center gap-3 text-slate-400 text-sm">
-            <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-            Chargement des statistiques...
+          <div className="flex items-center gap-3 text-slate-400 text-sm mb-6">
+            <div className="w-4 h-4 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin" />
+            Chargement...
           </div>
         )}
 
         {stats && (
           <>
-            <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 mb-5 shadow-sm">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">
-                    Score de conformité global
-                  </p>
-                  <p className="font-heading text-3xl font-bold text-slate-900 dark:text-white">
-                    {stats.avgScore}%
-                  </p>
-                  <p className="text-slate-400 text-xs mt-1">
-                    {stats.totalDocuments} document{stats.totalDocuments !== 1 ? "s" : ""} analysé
-                    {stats.totalDocuments !== 1 ? "s" : ""}
-                  </p>
+            {/* Hero row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+              {/* Score + chart */}
+              <div className={`${CARD} p-5 lg:col-span-2`}>
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-1">
+                      Score de conformité global
+                    </p>
+                    <p className="text-3xl font-semibold text-slate-900 dark:text-white tabular-nums">
+                      {stats.avgScore}%
+                    </p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      {stats.totalDocuments} document
+                      {stats.totalDocuments !== 1 ? "s" : ""} analysé
+                      {stats.totalDocuments !== 1 ? "s" : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex flex-col md:flex-row gap-6 items-center">
-                <ResponsiveContainer width="100%" height={100} className="md:!w-[70%]">
-                  <AreaChart data={stats.monthlyActivity}>
-                    <defs>
-                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#EC4899" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#EC4899" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "#94A3B8", fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip contentStyle={TOOLTIP_STYLE} />
-                    <Area
-                      type="monotone"
-                      dataKey="count"
-                      stroke="#EC4899"
-                      strokeWidth={2}
-                      fill="url(#colorCount)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-
-                <div className="flex items-center gap-4">
-                  <ResponsiveContainer width={90} height={90}>
-                    <PieChart>
-                      <Pie
-                        data={conformiteData}
-                        dataKey="value"
-                        innerRadius={28}
-                        outerRadius={42}
-                        stroke="none"
-                      >
-                        {conformiteData.map((_, i) => (
-                          <Cell key={i} fill={DONUT_COLORS[i]} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="space-y-1.5">
-                    {conformiteData.map((item, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs">
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: DONUT_COLORS[i] }}
+                <div className="flex flex-col sm:flex-row gap-6 items-end">
+                  <div className="flex-1 w-full h-[100px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={stats.monthlyActivity}>
+                        <defs>
+                          <linearGradient
+                            id="colorCount"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="5%"
+                              stopColor="#EC4899"
+                              stopOpacity={0.3}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor="#EC4899"
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fill: "#94A3B8", fontSize: 11 }}
+                          axisLine={false}
+                          tickLine={false}
                         />
-                        <span className="text-slate-500 dark:text-slate-400">{item.name}</span>
-                        <span className="text-slate-900 dark:text-white font-medium">
-                          {item.value}
-                        </span>
-                      </div>
-                    ))}
+                        <Tooltip contentStyle={TOOLTIP_STYLE} />
+                        <Area
+                          type="monotone"
+                          dataKey="count"
+                          stroke="#EC4899"
+                          strokeWidth={2}
+                          fill="url(#colorCount)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="flex items-center gap-4 shrink-0">
+                    <ResponsiveContainer width={80} height={80}>
+                      <PieChart>
+                        <Pie
+                          data={conformiteData}
+                          dataKey="value"
+                          innerRadius={26}
+                          outerRadius={38}
+                          stroke="none"
+                          paddingAngle={2}
+                        >
+                          {conformiteData.map((_, i) => (
+                            <Cell key={i} fill={DONUT_COLORS[i]} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="space-y-2">
+                      {conformiteData.map((item, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-2 text-xs"
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{
+                              backgroundColor: DONUT_COLORS[i],
+                            }}
+                          />
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {item.name}
+                          </span>
+                          <span className="text-slate-900 dark:text-white font-medium tabular-nums ml-auto">
+                            {item.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-1">
-              {statCards.map((card, i) => (
-                <div
-                  key={i}
-                  className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-5 text-white shadow-sm`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-white/80 text-xs">{card.label}</p>
-                    <card.icon size={16} className="text-white/60" />
+              {/* Quick metrics column */}
+              <div className="space-y-3">
+                {[
+                  { label: "Score moyen", value: `${stats.avgScore}%` },
+                  {
+                    label: "Contrats à risque",
+                    value: stats.risqueCount,
+                    alert: stats.risqueCount > 0,
+                  },
+                  { label: "Temps économisé", value: `${hoursSaved}h` },
+                  {
+                    label: "Échéances <14j",
+                    value: urgentObligationsCount,
+                    alert: urgentObligationsCount > 0,
+                  },
+                ].map((m, i) => (
+                  <div key={i} className={`${CARD} p-4 flex items-center justify-between`}>
+                    <div>
+                      <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium">
+                        {m.label}
+                      </p>
+                      <p
+                        className={`text-lg font-semibold tabular-nums ${
+                          m.alert
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-slate-900 dark:text-white"
+                        }`}
+                      >
+                        {m.value}
+                      </p>
+                    </div>
                   </div>
-                  <p className="font-heading text-xl md:text-2xl font-bold">{card.value}</p>
-                </div>
-              ))}
+                ))}
+                <p className="text-slate-400 text-[10px] px-1">
+                  * Estimation basée sur {REVIEW_TIME_MINUTES_PER_DOC} min de
+                  révision manuelle par contrat
+                </p>
+              </div>
             </div>
-            <p className="text-slate-400 text-[10px] mb-5">
-              * Estimation basée sur {REVIEW_TIME_MINUTES_PER_DOC} min de révision manuelle par
-              contrat
-            </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-              <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                  Score par catégorie de conformité
+            {/* Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-5">
+                  Score par catégorie
                 </p>
                 {stats.categoriesAvg.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <RadarChart data={stats.categoriesAvg} outerRadius="75%">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <RadarChart
+                      data={stats.categoriesAvg}
+                      outerRadius="75%"
+                    >
                       <PolarGrid stroke="#E2E8F0" />
-                      <PolarAngleAxis dataKey="nom" tick={{ fill: "#94A3B8", fontSize: 10 }} />
-                      <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                      <PolarAngleAxis
+                        dataKey="nom"
+                        tick={{ fill: "#94A3B8", fontSize: 11 }}
+                      />
+                      <PolarRadiusAxis
+                        domain={[0, 100]}
+                        tick={false}
+                        axisLine={false}
+                      />
                       <Radar
                         name="Score"
                         dataKey="score"
                         stroke="#8B5CF6"
                         fill="#8B5CF6"
-                        fillOpacity={0.35}
+                        fillOpacity={0.25}
+                        strokeWidth={2}
                       />
                       <Tooltip contentStyle={TOOLTIP_STYLE} />
                     </RadarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <p className="text-slate-400 text-sm">Pas assez de données pour l'instant</p>
+                  <div className="h-[220px] flex items-center justify-center text-slate-400 text-sm">
+                    Pas assez de données
+                  </div>
                 )}
               </div>
 
-              <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                  Problèmes détectés par catégorie
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-5">
+                  Problèmes par catégorie
                 </p>
                 {problemsByCategory.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={problemsByCategory} layout="vertical" margin={{ left: 10, right: 20 }}>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart
+                      data={problemsByCategory}
+                      layout="vertical"
+                      margin={{ left: 10, right: 20 }}
+                    >
                       <XAxis
                         type="number"
                         allowDecimals={false}
-                        tick={{ fill: "#94A3B8", fontSize: 10 }}
+                        tick={{ fill: "#94A3B8", fontSize: 11 }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <YAxis
                         type="category"
                         dataKey="nom"
-                        width={130}
-                        tick={{ fill: "#94A3B8", fontSize: 10 }}
+                        width={120}
+                        tick={{ fill: "#94A3B8", fontSize: 11 }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <Tooltip contentStyle={TOOLTIP_STYLE} />
-                      <Bar dataKey="nb_problemes" radius={[0, 6, 6, 0]} barSize={16}>
+                      <Bar
+                        dataKey="nb_problemes"
+                        radius={[0, 4, 4, 0]}
+                        barSize={14}
+                      >
                         {problemsByCategory.map((_, i) => (
-                          <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+                          <Cell
+                            key={i}
+                            fill={
+                              CATEGORY_COLORS[
+                                i % CATEGORY_COLORS.length
+                              ]
+                            }
+                          />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <p className="text-slate-400 text-sm">Pas assez de données pour l'instant</p>
+                  <div className="h-[220px] flex items-center justify-center text-slate-400 text-sm">
+                    Pas assez de données
+                  </div>
                 )}
               </div>
             </div>
 
+            {/* Lists */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                  Derniers contrats analysés
+              {/* Recent docs */}
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
+                  Derniers contrats
                 </p>
                 {stats.recentDocuments.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="divide-y divide-slate-50 dark:divide-white/[0.04]">
                     {stats.recentDocuments.map((doc) => (
                       <Link
                         key={doc.id}
                         to={`/analyze?documentId=${doc.id}`}
-                        className="flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg p-2 -m-2 transition"
+                        className="flex items-center gap-3 py-3 -mx-1 px-1 rounded-lg hover:bg-slate-50 dark:hover:bg-white/[0.02] transition group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
-                          <FileText size={14} className="text-pink-500" />
-                        </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-slate-700 dark:text-slate-200 text-sm truncate">
+                          <p className="text-slate-700 dark:text-slate-200 text-sm font-medium truncate">
                             {doc.filename || `Document #${doc.id}`}
                           </p>
                           <p className="text-slate-400 text-xs">
-                            {new Date(doc.createdAt).toLocaleDateString("fr-FR")}
+                            {new Date(doc.createdAt).toLocaleDateString(
+                              "fr-FR"
+                            )}
                           </p>
                         </div>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full shrink-0 bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                        <span
+                          className={`text-xs font-semibold tabular-nums ${
+                            (doc.score ?? 0) < 40
+                              ? "text-red-600 dark:text-red-400"
+                              : (doc.score ?? 0) < 70
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          }`}
+                        >
                           {doc.score}%
                         </span>
                       </Link>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-400 text-sm">Aucun document analysé pour le moment</p>
+                  <p className="text-slate-400 text-sm py-4">
+                    Aucun document analysé
+                  </p>
                 )}
               </div>
 
-              <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                  Échéances à surveiller
+              {/* Obligations */}
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
+                  Échéances
                 </p>
                 {sortedObligations.length > 0 ? (
-                  <div className="space-y-3">
-                    {sortedObligations.slice(0, 4).map((ob) => (
-                      <div key={ob.id} className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
-                          <CalendarClock size={14} className="text-violet-500" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-slate-700 dark:text-slate-200 text-sm truncate">
-                            {OBLIGATION_LABELS[ob.type] ?? ob.type}
-                          </p>
-                          <p className="text-slate-400 text-xs truncate">{ob.description}</p>
-                          {ob.dueDate && (
-                            <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-1">
-                              {daysUntil(ob.dueDate)} jour{daysUntil(ob.dueDate) !== 1 ? "s" : ""}
+                  <div className="divide-y divide-slate-50 dark:divide-white/[0.04]">
+                    {sortedObligations.slice(0, 4).map((ob) => {
+                      const days = ob.dueDate
+                        ? daysUntil(ob.dueDate)
+                        : null;
+                      const isUrgent = days !== null && days < 14;
+                      return (
+                        <div
+                          key={ob.id}
+                          className="py-3 flex items-start gap-3"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-slate-700 dark:text-slate-200 text-sm font-medium">
+                              {OBLIGATION_LABELS[ob.type] ?? ob.type}
                             </p>
-                          )}
+                            <p className="text-slate-400 text-xs truncate">
+                              {ob.description}
+                            </p>
+                            {days !== null && (
+                              <p
+                                className={`text-[11px] mt-1 font-medium tabular-nums ${
+                                  isUrgent
+                                    ? "text-red-500"
+                                    : "text-slate-400"
+                                }`}
+                              >
+                                {days} jour{days !== 1 ? "s" : ""}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
-                  <p className="text-slate-400 text-sm">Aucune échéance détectée</p>
+                  <p className="text-slate-400 text-sm py-4">
+                    Aucune échéance
+                  </p>
                 )}
               </div>
 
-              <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                  Risques majeurs récents
+              {/* High risks */}
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
+                  Risques majeurs
                 </p>
                 {stats.recentHighRisks.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="divide-y divide-slate-50 dark:divide-white/[0.04]">
                     {stats.recentHighRisks.slice(0, 3).map((risk, i) => (
-                      <div key={i} className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center shrink-0">
-                          <AlertTriangle size={14} className="text-red-500" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-slate-700 dark:text-slate-200 text-sm truncate">
-                            {risk.clause}
-                          </p>
-                          <p className="text-slate-400 text-xs line-clamp-2">{risk.description}</p>
-                        </div>
+                      <div key={i} className="py-3">
+                        <p className="text-slate-700 dark:text-slate-200 text-sm font-medium truncate">
+                          {risk.clause}
+                        </p>
+                        <p className="text-slate-400 text-xs line-clamp-2 leading-relaxed mt-0.5">
+                          {risk.description}
+                        </p>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-400 text-sm">Aucun risque majeur détecté</p>
+                  <p className="text-slate-400 text-sm py-4">
+                    Aucun risque majeur
+                  </p>
                 )}
               </div>
             </div>
-          </>)}
+          </>
+        )}
       </div>
     </AppLayout>
   );

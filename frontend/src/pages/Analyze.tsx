@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   PieChart,
@@ -11,63 +11,47 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { analyzeContract, getDocumentAnalysis, mapDocumentToAnalysis } from "../api/compliance";
+import {
+  analyzeContract,
+  getDocumentAnalysis,
+  mapDocumentToAnalysis,
+} from "../api/compliance";
 import type { ContractAnalysis, Severity } from "../api/compliance";
 import { extractTextFromPdf } from "../utils/pdfExtract";
 import AppLayout from "../components/Layout";
 import {
-  FileSearch,
-  AlertTriangle,
-  AlertCircle,
-  Info,
-  FileWarning,
   Upload,
   FileText,
   X,
   Copy,
   Check,
-  ShieldAlert,
-  ListChecks,
-  Layers,
-  FileEdit,
+  ArrowRight,
 } from "lucide-react";
 
-type SeverityStyle = {
-  color: string;
-  bg: string;
-  border: string;
-  icon: ReactNode;
-  label: string;
-};
-
-const SEVERITY_STYLES: Record<string, SeverityStyle> = {
+/* ── Minimal severity styles — no colorful icon blobs ── */
+const SEVERITY_STYLES: Record<
+  string,
+  { color: string; label: string; dot: string }
+> = {
   CRITICAL: {
-    color: "text-red-700 dark:text-red-400",
-    bg: "bg-red-100 dark:bg-red-500/15",
-    border: "border-red-300 dark:border-red-500/40",
-    icon: <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />,
+    color: "text-red-600 dark:text-red-400",
     label: "Critique",
+    dot: "bg-red-500",
   },
   HIGH: {
     color: "text-orange-600 dark:text-orange-400",
-    bg: "bg-orange-50 dark:bg-orange-500/10",
-    border: "border-orange-200 dark:border-orange-500/30",
-    icon: <AlertTriangle size={16} className="text-orange-500 shrink-0 mt-0.5" />,
-    label: "Sévérité haute",
+    label: "Haute",
+    dot: "bg-orange-500",
   },
   MEDIUM: {
     color: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-50 dark:bg-amber-500/10",
-    border: "border-amber-200 dark:border-amber-500/30",
-    icon: <Info size={16} className="text-amber-500 shrink-0 mt-0.5" />,
-    label: "Sévérité moyenne",
+    label: "Moyenne",
+    dot: "bg-amber-500",
   },
   LOW: {
     color: "text-slate-500 dark:text-slate-400",
-    bg: "bg-slate-50 dark:bg-slate-500/10",
-    border: "border-slate-200 dark:border-slate-500/30",
-    icon: <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />,
-    label: "Sévérité basse",
+    label: "Basse",
+    dot: "bg-slate-400",
   },
 };
 
@@ -84,12 +68,16 @@ const TOOLTIP_STYLE = {
   backgroundColor: "#FFFFFF",
   border: "1px solid #E2E8F0",
   borderRadius: 8,
+  boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
 };
 
+const CARD =
+  "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.04]";
+
 function scoreColor(score: number) {
-  if (score < 40) return "#EF4444";
+  if (score < 40) return "#DC2626";
   if (score < 70) return "#F59E0B";
-  return "#22C55E";
+  return "#16A34A";
 }
 
 export default function Analyze() {
@@ -109,38 +97,28 @@ export default function Analyze() {
 
   useEffect(() => {
     if (!documentId) return;
-
     let cancelled = false;
 
-    const loadDocumentAnalysis = async () => {
+    const load = async () => {
       setLoading(true);
       setError(null);
-
       try {
         const { document } = await getDocumentAnalysis(Number(documentId));
-
         if (cancelled) return;
-
         const mapped = mapDocumentToAnalysis(document);
         if (!mapped) {
           setError("Cette analyse n'est pas disponible.");
           return;
         }
-
         setResult(mapped);
-      } catch (err) {
-        if (cancelled) return;
-        console.error(err);
-        setError("Impossible de charger cette analyse.");
+      } catch {
+        if (!cancelled) setError("Impossible de charger cette analyse.");
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 
-    loadDocumentAnalysis();
-
+    load();
     return () => {
       cancelled = true;
     };
@@ -157,8 +135,7 @@ export default function Analyze() {
     try {
       const text = await extractTextFromPdf(file);
       setContractText(text);
-    } catch (err) {
-      console.error(err);
+    } catch {
       setError("Impossible de lire ce PDF. Essayez un autre fichier.");
       setPdfFile(null);
     } finally {
@@ -181,23 +158,20 @@ export default function Analyze() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contractText.trim()) return;
-
     setLoading(true);
     setError(null);
     setResult(null);
-
     try {
       const data = await analyzeContract(contractText, pdfFile?.name);
       setResult(data.analysis);
-    } catch (err) {
+    } catch {
       setError("Impossible d'analyser le contrat. Réessayez.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const resetToNewAnalysis = () => {
+  const reset = () => {
     setResult(null);
     setContractText("");
     clearPdf();
@@ -209,9 +183,9 @@ export default function Analyze() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedIndex(index);
-      setTimeout(() => setCopiedIndex((cur) => (cur === index ? null : cur)), 2000);
-    } catch (err) {
-      console.error("Erreur copie:", err);
+      setTimeout(() => setCopiedIndex((c) => (c === index ? null : c)), 2000);
+    } catch {
+      /* ignore */
     }
   };
 
@@ -224,7 +198,12 @@ export default function Analyze() {
 
   const sortedRisques = result
     ? [...result.risques].sort((a, b) => {
-        const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+        const order: Record<string, number> = {
+          CRITICAL: 0,
+          HIGH: 1,
+          MEDIUM: 2,
+          LOW: 3,
+        };
         return order[a.severite] - order[b.severite];
       })
     : [];
@@ -237,87 +216,65 @@ export default function Analyze() {
       })).filter((d) => d.value > 0)
     : [];
 
-  const criticalCount = result ? result.risques.filter((r) => r.severite === "CRITICAL").length : 0;
-  const categoriesAtRiskCount = result ? result.categories.filter((c) => c.score < 40).length : 0;
-  const suggestionsCount = result ? result.risques.filter((r) => r.clause_suggeree).length : 0;
-
-  const kpiCards = result
-    ? [
-        {
-          label: "Risques critiques",
-          value: criticalCount,
-          icon: ShieldAlert,
-          color: criticalCount > 0 ? "from-red-500 to-red-600" : "from-slate-400 to-slate-500",
-        },
-        {
-          label: "Clauses manquantes",
-          value: result.clauses_manquantes.length,
-          icon: FileWarning,
-          color:
-            result.clauses_manquantes.length > 0
-              ? "from-orange-500 to-orange-600"
-              : "from-slate-400 to-slate-500",
-        },
-        {
-          label: "Catégories à risque",
-          value: `${categoriesAtRiskCount}/${result.categories.length}`,
-          icon: Layers,
-          color:
-            categoriesAtRiskCount > 0
-              ? "from-amber-500 to-amber-600"
-              : "from-slate-400 to-slate-500",
-        },
-        {
-          label: "Reformulations suggérées",
-          value: suggestionsCount,
-          icon: FileEdit,
-          color: "from-violet-500 to-violet-600",
-        },
-      ]
-    : [];
+  const criticalCount = result
+    ? result.risques.filter((r) => r.severite === "CRITICAL").length
+    : 0;
+  const categoriesAtRiskCount = result
+    ? result.categories.filter((c) => c.score < 40).length
+    : 0;
+  const suggestionsCount = result
+    ? result.risques.filter((r) => r.clause_suggeree).length
+    : 0;
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-1">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
-            <FileSearch className="text-pink-500" size={20} />
-          </div>
-          <h1 className="font-heading text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
             Analyser un contrat
           </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Collez le texte ou importez un PDF pour vérifier la conformité
+            réglementaire
+          </p>
         </div>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mb-8">
-          Collez le texte du contrat ou importez un PDF pour vérifier sa conformité réglementaire
-        </p>
 
+        {/* Input form */}
         {!result && !documentId && (
-          <form onSubmit={handleSubmit} className="mb-8">
-            <div className="flex gap-2 mb-4">
+          <form onSubmit={handleSubmit} className="mb-12">
+            {/* Mode tabs */}
+            <div className="flex gap-1 mb-4 border-b border-slate-100 dark:border-white/5 pb-px">
               <button
                 type="button"
                 onClick={() => {
                   setMode("text");
                   clearPdf();
                 }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                className={`px-3 py-2 text-sm font-medium transition relative ${
                   mode === "text"
-                    ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                    : "bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "text-slate-900 dark:text-white"
+                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                 }`}
               >
-                Coller le texte
+                Texte
+                {mode === "text" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 dark:bg-white rounded-full" />
+                )}
               </button>
               <button
                 type="button"
                 onClick={() => setMode("pdf")}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                className={`px-3 py-2 text-sm font-medium transition relative ${
                   mode === "pdf"
-                    ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                    : "bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "text-slate-900 dark:text-white"
+                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                 }`}
               >
-                Importer un PDF
+                PDF
+                {mode === "pdf" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 dark:bg-white rounded-full" />
+                )}
               </button>
             </div>
 
@@ -327,7 +284,7 @@ export default function Analyze() {
                 onChange={(e) => setContractText(e.target.value)}
                 placeholder="Collez ici le texte complet du contrat..."
                 rows={10}
-                className="w-full bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 focus:border-pink-400 dark:focus:border-pink-500/40 rounded-2xl p-4 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none resize-none text-sm mb-4 transition shadow-sm"
+                className="w-full bg-transparent border border-slate-200 dark:border-white/10 focus:border-slate-400 dark:focus:border-white/20 rounded-2xl p-4 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none resize-none text-sm mb-4 transition"
               />
             )}
 
@@ -338,13 +295,17 @@ export default function Analyze() {
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-pink-400 dark:hover:border-pink-500/40 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center cursor-pointer transition bg-white dark:bg-[#0D1410] shadow-sm"
+                    className="w-full border border-dashed border-slate-200 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/30 rounded-2xl p-10 md:p-14 flex flex-col items-center justify-center text-center cursor-pointer transition bg-transparent"
                   >
-                    <Upload size={28} className="text-pink-500 mb-3" />
+                    <Upload
+                      size={24}
+                      className="text-slate-400 mb-3"
+                      strokeWidth={1.5}
+                    />
                     <p className="text-slate-600 dark:text-slate-300 text-sm mb-1">
-                      Glissez-déposez un PDF ici, ou cliquez pour parcourir
+                      Glissez-déposez un PDF, ou cliquez pour parcourir
                     </p>
-                    <p className="text-slate-400 text-xs">Format accepté : .pdf</p>
+                    <p className="text-slate-400 text-xs">.pdf uniquement</p>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -357,25 +318,31 @@ export default function Analyze() {
                     />
                   </div>
                 ) : (
-                  <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
-                    <div className="w-10 h-10 rounded-lg bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
-                      <FileText size={18} className="text-pink-500" />
-                    </div>
+                  <div
+                    className={`${CARD} p-4 flex items-center gap-3`}
+                  >
+                    <FileText
+                      size={18}
+                      className="text-slate-400 shrink-0"
+                      strokeWidth={1.5}
+                    />
                     <div className="flex-1 min-w-0">
-                      <p className="text-slate-900 dark:text-white text-sm truncate">{pdfFile.name}</p>
+                      <p className="text-slate-900 dark:text-white text-sm truncate">
+                        {pdfFile.name}
+                      </p>
                       <p className="text-slate-400 text-xs">
                         {extracting
-                          ? "Extraction du texte en cours..."
-                          : `${contractText.length.toLocaleString()} caractères extraits`}
+                          ? "Extraction..."
+                          : `${contractText.length.toLocaleString()} caractères`}
                       </p>
                     </div>
                     {extracting ? (
-                      <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                      <div className="w-4 h-4 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin shrink-0" />
                     ) : (
                       <button
                         type="button"
                         onClick={clearPdf}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition shrink-0"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white transition shrink-0"
                       >
                         <X size={16} />
                       </button>
@@ -388,7 +355,7 @@ export default function Analyze() {
             <button
               type="submit"
               disabled={loading || extracting || !contractText.trim()}
-              className="w-full bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition"
+              className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-medium py-3 rounded-xl hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
             >
               {loading ? "Analyse en cours..." : "Lancer l'analyse"}
             </button>
@@ -396,59 +363,65 @@ export default function Analyze() {
         )}
 
         {loading && (
-          <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-sm mb-6">
-            <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-            {documentId ? "Chargement de l'analyse..." : "Analyse du contrat en cours (cela peut prendre quelques secondes)..."}
+          <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-sm mb-8">
+            <div className="w-4 h-4 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin" />
+            {documentId
+              ? "Chargement de l'analyse..."
+              : "Analyse en cours..."}
           </div>
         )}
 
         {error && (
-          <p className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl px-4 py-3 mb-6">
+          <p className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl px-4 py-3 mb-8">
             {error}
           </p>
         )}
 
+        {/* Results */}
         {result && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <button
-              onClick={resetToNewAnalysis}
-              className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition inline-flex items-center gap-2"
+              onClick={reset}
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1"
             >
-              <FileSearch size={14} />
-              Analyser un autre contrat
+              <ArrowRight size={12} className="rotate-180" />
+              Nouvelle analyse
             </button>
 
+            {/* Score + Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm">
-                <ResponsiveContainer width={140} height={140}>
+              <div
+                className={`${CARD} p-6 flex flex-col items-center justify-center aspect-square md:aspect-auto`}
+              >
+                <ResponsiveContainer width={120} height={120}>
                   <PieChart>
                     <Pie
                       data={donutData}
                       dataKey="value"
-                      innerRadius={45}
-                      outerRadius={65}
+                      innerRadius={42}
+                      outerRadius={58}
                       startAngle={90}
                       endAngle={-270}
                       stroke="none"
                     >
                       <Cell fill={scoreColor(result.score_global)} />
-                      <Cell fill="#E2E8F0" className="dark:fill-[#1F2922]" />
+                      <Cell fill="#E2E8F0" className="dark:fill-[#1e1a2e]" />
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
                 <p
-                  className="font-heading text-3xl font-bold -mt-24 mb-16"
+                  className="text-3xl font-semibold -mt-28 mb-20 tabular-nums"
                   style={{ color: scoreColor(result.score_global) }}
                 >
                   {result.score_global}%
                 </p>
-                <p className="text-slate-400 text-xs uppercase tracking-wide mt-2">
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium">
                   Score global
                 </p>
               </div>
 
-              <div className="md:col-span-2 bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-3">
+              <div className={`${CARD} md:col-span-2 p-6`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-3">
                   Résumé
                 </p>
                 <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
@@ -457,41 +430,53 @@ export default function Analyze() {
               </div>
             </div>
 
-            {/* KPI row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-              {kpiCards.map((card, i) => (
-                <div
-                  key={i}
-                  className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-5 text-white shadow-sm`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-white/80 text-xs">{card.label}</p>
-                    <card.icon size={16} className="text-white/60" />
-                  </div>
-                  <p className="font-heading text-xl md:text-2xl font-bold">{card.value}</p>
+            {/* Metrics — flat, minimal */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "Risques critiques", value: criticalCount },
+                { label: "Clauses manquantes", value: result.clauses_manquantes.length },
+                { label: "Catégories à risque", value: `${categoriesAtRiskCount}/${result.categories.length}` },
+                { label: "Reformulations", value: suggestionsCount },
+              ].map((m, i) => (
+                <div key={i} className={`${CARD} p-4`}>
+                  <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-1">
+                    {m.label}
+                  </p>
+                  <p className="text-xl font-semibold text-slate-900 dark:text-white tabular-nums">
+                    {m.value}
+                  </p>
                 </div>
               ))}
             </div>
 
+            {/* Charts */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm overflow-x-auto">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
                   Scores par catégorie
                 </p>
-                <div className="min-w-[280px]">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={result.categories} layout="vertical" margin={{ left: 20 }}>
+                <div className="min-w-[260px]">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart
+                      data={result.categories}
+                      layout="vertical"
+                      margin={{ left: 10 }}
+                    >
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis
                         type="category"
                         dataKey="nom"
-                        width={140}
+                        width={120}
                         tick={{ fill: "#94A3B8", fontSize: 11 }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <Tooltip contentStyle={TOOLTIP_STYLE} />
-                      <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={18}>
+                      <Bar
+                        dataKey="score"
+                        radius={[0, 4, 4, 0]}
+                        barSize={14}
+                      >
                         {result.categories.map((cat, i) => (
                           <Cell key={i} fill={scoreColor(cat.score)} />
                         ))}
@@ -501,19 +486,19 @@ export default function Analyze() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
-                  Répartition des risques par sévérité
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
+                  Répartition des risques
                 </p>
                 {severityData.length > 0 ? (
-                  <div className="flex items-center gap-4">
-                    <ResponsiveContainer width={130} height={130}>
+                  <div className="flex items-center gap-6">
+                    <ResponsiveContainer width={120} height={120}>
                       <PieChart>
                         <Pie
                           data={severityData}
                           dataKey="value"
-                          innerRadius={38}
-                          outerRadius={58}
+                          innerRadius={36}
+                          outerRadius={54}
                           stroke="none"
                         >
                           {severityData.map((d, i) => (
@@ -523,108 +508,122 @@ export default function Analyze() {
                         <Tooltip contentStyle={TOOLTIP_STYLE} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="space-y-1.5 flex-1">
+                    <div className="space-y-2 flex-1">
                       {severityData.map((d, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
+                        <div
+                          key={i}
+                          className="flex items-center gap-2 text-xs"
+                        >
                           <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: SEVERITY_HEX[d.severity] }}
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{
+                              backgroundColor: SEVERITY_HEX[d.severity],
+                            }}
                           />
-                          <span className="text-slate-500 dark:text-slate-400 flex-1">{d.name}</span>
-                          <span className="text-slate-900 dark:text-white font-medium">{d.value}</span>
+                          <span className="text-slate-500 dark:text-slate-400 flex-1">
+                            {d.name}
+                          </span>
+                          <span className="text-slate-900 dark:text-white font-medium tabular-nums">
+                            {d.value}
+                          </span>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm">
-                    <ListChecks size={16} />
-                    Aucun risque identifié dans ce contrat
+                  <div className="h-[120px] flex items-center text-emerald-600 dark:text-emerald-400 text-sm">
+                    Aucun risque identifié
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Missing clauses */}
             {result.clauses_manquantes.length > 0 && (
-              <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-4 md:p-6 shadow-sm">
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">
+              <div className={`${CARD} p-5`}>
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
                   Clauses manquantes
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {result.clauses_manquantes.map((clause, i) => (
-                    <div
+                    <span
                       key={i}
-                      className="flex items-center gap-2 bg-pink-50 dark:bg-pink-500/5 border border-pink-200 dark:border-pink-500/20 rounded-lg px-3 py-2"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5"
                     >
-                      <FileWarning size={14} className="text-pink-500 shrink-0" />
-                      <span className="text-slate-700 dark:text-slate-300 text-sm">{clause}</span>
-                    </div>
+                      <span className="w-1 h-1 rounded-full bg-slate-400" />
+                      {clause}
+                    </span>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Risks */}
             {sortedRisques.length > 0 && (
               <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wide mb-3">
-                  Risques identifiés ({sortedRisques.length})
+                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-3">
+                  Risques identifiés
                 </p>
                 <div className="space-y-2">
                   {sortedRisques.map((risque, i) => {
-                    const style = SEVERITY_STYLES[risque.severite] || SEVERITY_STYLES.LOW;
+                    const style =
+                      SEVERITY_STYLES[risque.severite] ||
+                      SEVERITY_STYLES.LOW;
                     return (
                       <div
                         key={i}
-                        className={`flex gap-3 ${style.bg} border ${style.border} rounded-xl px-4 py-3`}
+                        className={`${CARD} p-4 hover:border-slate-200 dark:hover:border-white/10 transition`}
                       >
-                        {style.icon}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <p className="text-slate-900 dark:text-white text-sm font-medium">
-                              {risque.clause}
-                            </p>
-                            <span
-                              className={`text-[10px] uppercase tracking-wide ${style.color} font-semibold`}
-                            >
-                              {style.label}
-                            </span>
-                          </div>
-                          <p className="text-slate-600 dark:text-slate-300 text-sm">
-                            {risque.description}
-                          </p>
-                          {risque.reference_legale && (
-                            <p className="text-slate-400 text-xs mt-1">
-                              Réf: {risque.reference_legale}
-                            </p>
-                          )}
-                          {risque.clause_suggeree && (
-                            <div className="mt-2 bg-white/60 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg p-3">
-                              <div className="flex items-center justify-between gap-2 mb-1.5">
-                                <p className="text-slate-400 text-[10px] uppercase tracking-wide">
-                                  Reformulation conforme suggérée
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopy(risque.clause_suggeree!, i)}
-                                  className="flex items-center gap-1 text-xs font-medium text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition shrink-0"
-                                >
-                                  {copiedIndex === i ? (
-                                    <>
-                                      <Check size={12} /> Copié
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy size={12} /> Copier
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                              <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
-                                {risque.clause_suggeree}
-                              </p>
-                            </div>
-                          )}
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${style.dot}`}
+                          />
+                          <span
+                            className={`text-[10px] uppercase tracking-wider font-semibold ${style.color}`}
+                          >
+                            {style.label}
+                          </span>
                         </div>
+                        <p className="text-slate-900 dark:text-white text-sm font-medium mb-1">
+                          {risque.clause}
+                        </p>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
+                          {risque.description}
+                        </p>
+                        {risque.reference_legale && (
+                          <p className="text-slate-400 text-xs mt-2">
+                            Réf: {risque.reference_legale}
+                          </p>
+                        )}
+                        {risque.clause_suggeree && (
+                          <div className="mt-3 bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/[0.06] rounded-xl p-3">
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <p className="text-slate-400 text-[10px] uppercase tracking-wider font-medium">
+                                Reformulation suggérée
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopy(risque.clause_suggeree!, i)
+                                }
+                                className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition"
+                              >
+                                {copiedIndex === i ? (
+                                  <>
+                                    <Check size={11} /> Copié
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={11} /> Copier
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
+                              {risque.clause_suggeree}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

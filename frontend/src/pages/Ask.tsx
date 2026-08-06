@@ -28,6 +28,14 @@ import {
   Trash2,
 } from "lucide-react";
 
+/* ── One accent family, used everywhere ── */
+const ACCENT = {
+  from: "#EC4899",
+  to: "#7C3AED",
+  light: "bg-pink-50 dark:bg-pink-500/[0.08]",
+  text: "text-pink-600 dark:text-pink-400",
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -41,12 +49,8 @@ export default function Ask() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<
-    number | null
-  >(null);
-  const [conversationToDelete, setConversationToDelete] = useState<
-    Conversation | null
-  >(null);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -70,40 +74,29 @@ export default function Ask() {
     setActiveConversationId(id);
     try {
       const res = await getConversationMessages(id);
-      const chatMsgs = res.conversation.messages.map(
-        (msg: ConversationMessage) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          sources: msg.sources,
-        }),
-      );
+      const chatMsgs = res.conversation.messages.map((msg: ConversationMessage) => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        sources: msg.sources,
+      }));
       setMessages(chatMsgs);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleDeleteConversation = (
-    event: React.MouseEvent,
-    conversation: Conversation,
-  ) => {
+  const handleDeleteConversation = (event: React.MouseEvent, conversation: Conversation) => {
     event.stopPropagation();
     setConversationToDelete(conversation);
   };
 
   const confirmDelete = async () => {
     if (!conversationToDelete) return;
-
     try {
       await deleteConversation(conversationToDelete.id);
-      setConversations((prev) =>
-        prev.filter((conversation) => conversation.id !== conversationToDelete.id),
-      );
-
-      if (activeConversationId === conversationToDelete.id) {
-        startNewConversation();
-      }
+      setConversations((prev) => prev.filter((c) => c.id !== conversationToDelete.id));
+      if (activeConversationId === conversationToDelete.id) startNewConversation();
     } catch (err) {
       console.error("Erreur lors de la suppression:", err);
     } finally {
@@ -126,10 +119,7 @@ export default function Ask() {
     setLoading(true);
 
     try {
-      const data = await askQuestion(
-        trimmed,
-        activeConversationId ?? undefined,
-      );
+      const data = await askQuestion(trimmed, activeConversationId ?? undefined);
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -165,44 +155,58 @@ export default function Ask() {
     }
   };
 
+  const cardBase =
+    "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.06] shadow-sm";
+
   return (
-    <div className="h-screen bg-violet-50/50 dark:bg-navy flex overflow-hidden">
-      {/* Sidebar — desktop only */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-white dark:bg-[#1A1420] flex-col shadow-sm">
-        <div className="bg-gradient-to-r from-pink-500 to-violet-500 px-6 py-5 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+    <div className="h-screen bg-[#f8f7fb] dark:bg-[#0a0614] flex overflow-hidden transition-colors duration-300">
+      {/* ═══════════════════════════════════════
+          SIDEBAR
+         ═══════════════════════════════════════ */}
+      <aside className="hidden md:flex w-64 shrink-0 flex-col h-screen sticky top-0
+        bg-[#fdf8fb] dark:bg-[#16121f]
+        border-r border-pink-100/60 dark:border-white/[0.05]">
+        
+        {/* Inset gradient header */}
+        <div
+          className="mx-3 mt-3 rounded-2xl px-5 py-4 flex items-center gap-3 shadow-sm shadow-pink-500/10"
+          style={{ background: `linear-gradient(135deg, ${ACCENT.from}, ${ACCENT.to})` }}
+        >
+          <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
             <LayoutDashboard size={16} className="text-white" />
           </div>
-          <h1 className="font-heading text-lg font-bold text-white">
-            Compliance<span className="opacity-90">IQ</span>
+          <h1 className="font-heading text-lg font-bold text-white tracking-tight">
+            Compliance<span className="opacity-80 font-medium">IQ</span>
           </h1>
         </div>
 
-        <div className="p-4 pt-6">
+        {/* New conversation — flat button, not gradient */}
+        <div className="p-3 pt-4">
           <button
             onClick={startNewConversation}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 text-white font-medium text-sm py-2.5 rounded-xl transition"
+            className={`w-full flex items-center justify-center gap-2 ${ACCENT.light} ${ACCENT.text} font-semibold text-sm py-2.5 rounded-xl hover:opacity-80 transition border border-pink-100 dark:border-pink-500/20`}
           >
             <Plus size={16} />
             Nouvelle conversation
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 space-y-1 pb-4">
+        {/* Conversation list */}
+        <div className="flex-1 overflow-y-auto px-2 space-y-0.5 pb-4">
           {conversations.map((conv) => (
             <div
               key={conv.id}
               className={`group w-full flex items-center gap-1 rounded-xl transition ${
                 activeConversationId === conv.id
-                  ? "bg-pink-50 dark:bg-pink-500/10"
-                  : "hover:bg-slate-50 dark:hover:bg-white/5"
+                  ? `${ACCENT.light} border border-pink-100 dark:border-pink-500/20`
+                  : "hover:bg-white dark:hover:bg-white/5"
               }`}
             >
               <button
                 onClick={() => loadConversation(conv.id)}
-                className={`flex-1 min-w-0 text-left px-3 py-2.5 text-sm truncate transition ${
+                className={`flex-1 min-w-0 text-left px-3 py-2.5 text-sm truncate transition font-medium ${
                   activeConversationId === conv.id
-                    ? "text-pink-600 dark:text-pink-400 font-medium"
+                    ? ACCENT.text
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -210,7 +214,7 @@ export default function Ask() {
               </button>
               <button
                 onClick={(e) => handleDeleteConversation(e, conv)}
-                className="shrink-0 p-1.5 mr-1 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition"
+                className="shrink-0 p-1.5 mr-1 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-500 transition"
                 title="Supprimer la conversation"
               >
                 <Trash2 size={14} />
@@ -221,31 +225,36 @@ export default function Ask() {
 
         <Link
           to="/dashboard"
-          className="flex items-center gap-3 px-3 py-2.5 mx-4 mb-4 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition text-sm"
+          className="flex items-center gap-3 px-3 py-2.5 mx-3 mb-3 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition text-sm font-medium"
         >
           <LayoutDashboard size={18} />
           Retour au dashboard
         </Link>
       </aside>
 
-      {/* Main column */}
+      {/* ═══════════════════════════════════════
+          MAIN COLUMN
+         ═══════════════════════════════════════ */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 pb-16 md:pb-0 overflow-hidden">
-        {/* Header */}
-        <div className="bg-white dark:bg-[#1A1420] px-4 md:px-8 py-4 flex items-center justify-between shadow-sm shrink-0">
+        {/* Top bar — matches AppLayout exactly */}
+        <div className="bg-white dark:bg-[#16121f] px-4 md:px-8 py-3.5 flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] sticky top-0 z-10 shrink-0">
           <h2 className="font-heading text-base md:text-lg font-bold text-slate-900 dark:text-white truncate">
             Bienvenue, {user?.fullName?.split(" ")[0]}
           </h2>
-          <div className="flex items-center gap-2 md:gap-4 shrink-0">
+          <div className="flex items-center gap-1 md:gap-3 shrink-0">
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition"
+              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition-all duration-200"
             >
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition">
+            <button className="relative p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all duration-200">
               <Bell size={18} />
             </button>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm"
+              style={{ background: `linear-gradient(135deg, ${ACCENT.from}, ${ACCENT.to})` }}
+            >
               {user?.fullName?.[0]?.toUpperCase() || "U"}
             </div>
           </div>
@@ -254,58 +263,52 @@ export default function Ask() {
         {/* Chat area */}
         <div className="max-w-3xl w-full mx-auto flex flex-col flex-1 p-4 md:p-8 pb-4 min-h-0 overflow-hidden">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-pink-50 dark:bg-pink-500/10 flex items-center justify-center shrink-0">
-              <MessageSquareText className="text-pink-500" size={20} />
+            <div className={`w-10 h-10 rounded-xl ${ACCENT.light} flex items-center justify-center shrink-0`}>
+              <MessageSquareText className={ACCENT.text} size={20} />
             </div>
-            <h1 className="font-heading text-xl md:text-2xl font-bold text-slate-900 dark:text-pink">
+            <h1 className="font-heading text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
               Poser une question
             </h1>
           </div>
           <p className="text-slate-400 text-sm mb-6">
-            Interrogez la base réglementaire (CNDP, Code du travail marocain,
-            RGPD)
+            Interrogez la base réglementaire (CNDP, Code du travail marocain, RGPD)
           </p>
 
           {/* Message thread */}
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-5 mb-4 min-h-0 pr-1">
             {messages.length === 0 && !loading && (
               <div className="h-full flex items-center justify-center text-center py-16">
-                <p className="text-slate-400 text-sm max-w-sm">
-                  Posez une question sur vos obligations réglementaires. Ex :
-                  "Quelles sont les obligations RGPD pour la conservation des
-                  données clients ?"
-                </p>
+                <div className={`${cardBase} px-6 py-8 max-w-sm`}>
+                  <MessageSquareText className={`mx-auto mb-3 ${ACCENT.text}`} size={28} />
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">
+                    Posez une question sur vos obligations réglementaires. Ex : "Quelles sont les obligations RGPD pour la conservation des données clients ?"
+                  </p>
+                </div>
               </div>
             )}
 
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex gap-3 ${
-                  msg.role === "user" ? "flex-row-reverse" : "flex-row"
-                }`}
+                className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
               >
                 <div
                   className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
                     msg.role === "user"
                       ? "bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-300"
-                      : "bg-pink-50 dark:bg-pink-500/10 text-pink-500"
+                      : `${ACCENT.light} ${ACCENT.text}`
                   }`}
                 >
-                  {msg.role === "user" ? (
-                    <User size={15} />
-                  ) : (
-                    <MessageSquareText size={15} />
-                  )}
+                  {msg.role === "user" ? <User size={15} /> : <MessageSquareText size={15} />}
                 </div>
 
                 <div
                   className={`max-w-[85%] md:max-w-[80%] rounded-2xl px-4 py-3 ${
                     msg.role === "user"
-                      ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white"
+                      ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900"
                       : msg.error
-                        ? "bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 text-orange-600 dark:text-orange-400"
-                        : "bg-white dark:bg-[#0D1410] border border-slate-100 dark:border-white/5 text-slate-700 dark:text-slate-200 shadow-sm"
+                        ? "bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400"
+                        : `${cardBase}`
                   }`}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed text-sm">
@@ -321,10 +324,8 @@ export default function Ask() {
                       }`}
                     >
                       <p
-                        className={`text-xs uppercase tracking-wide ${
-                          msg.role === "user"
-                            ? "text-white/70"
-                            : "text-slate-400"
+                        className={`text-[11px] uppercase tracking-wider font-semibold ${
+                          msg.role === "user" ? "text-white/60" : "text-slate-400"
                         }`}
                       >
                         Sources consultées
@@ -333,32 +334,23 @@ export default function Ask() {
                         <div
                           key={i}
                           className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                            msg.role === "user"
-                              ? "bg-white/10"
-                              : "bg-slate-50 dark:bg-white/5"
+                            msg.role === "user" ? "bg-white/10" : "bg-slate-50 dark:bg-white/5"
                           }`}
                         >
-                          <FileText
-                            size={14}
-                            className="shrink-0 text-pink-400"
-                          />
+                          <FileText size={14} className="shrink-0 text-pink-400" />
                           <span
                             className={`text-xs ${
-                              msg.role === "user"
-                                ? "text-white/90"
-                                : "text-slate-500 dark:text-slate-300"
+                              msg.role === "user" ? "text-white/90" : "text-slate-500 dark:text-slate-300"
                             }`}
                           >
                             {source.sourceFile}
                           </span>
                           <span
-                            className={`text-xs ml-auto ${
-                              msg.role === "user"
-                                ? "text-white/60"
-                                : "text-slate-400"
+                            className={`text-xs ml-auto tabular-nums ${
+                              msg.role === "user" ? "text-white/50" : "text-slate-400"
                             }`}
                           >
-                            section #{source.chunkIndex}
+                            #{source.chunkIndex}
                           </span>
                         </div>
                       ))}
@@ -370,14 +362,12 @@ export default function Ask() {
 
             {loading && (
               <div className="flex gap-3">
-                <div className="shrink-0 w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-500/10 text-pink-500 flex items-center justify-center">
+                <div className={`shrink-0 w-8 h-8 rounded-lg ${ACCENT.light} ${ACCENT.text} flex items-center justify-center`}>
                   <MessageSquareText size={15} />
                 </div>
-                <div className="bg-white dark:bg-[#0D1410] border border-slate-100 dark:border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-sm">
+                <div className={`${cardBase} rounded-2xl px-4 py-3 flex items-center gap-2`}>
                   <div className="w-3.5 h-3.5 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-slate-400 text-sm">
-                    Recherche dans la base réglementaire...
-                  </span>
+                  <span className="text-slate-400 text-sm">Recherche dans la base réglementaire...</span>
                 </div>
               </div>
             )}
@@ -387,7 +377,7 @@ export default function Ask() {
 
           {/* Input */}
           <form onSubmit={handleSubmit}>
-            <div className="bg-white dark:bg-[#0D1410] border border-slate-200 dark:border-white/5 rounded-2xl p-2 flex items-end gap-2 focus-within:border-pink-400 dark:focus-within:border-pink-500/40 transition shadow-sm">
+            <div className={`${cardBase} p-2 flex items-end gap-2 focus-within:ring-2 focus-within:ring-pink-500/20 focus-within:border-pink-300 dark:focus-within:border-pink-500/30 transition-all`}>
               <textarea
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
@@ -399,7 +389,8 @@ export default function Ask() {
               <button
                 type="submit"
                 disabled={loading || !question.trim()}
-                className="shrink-0 bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-white p-3 rounded-xl transition"
+                className="shrink-0 text-white p-3 rounded-xl transition hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                style={{ background: `linear-gradient(135deg, ${ACCENT.from}, ${ACCENT.to})` }}
               >
                 <Send size={18} />
               </button>
@@ -408,18 +399,17 @@ export default function Ask() {
         </div>
       </div>
 
+      {/* Delete modal */}
       {conversationToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-[#1A1420]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+          <div className={`w-full max-w-md rounded-2xl ${cardBase} p-6`}>
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-500 dark:bg-red-500/10">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-500 dark:bg-rose-500/10">
                 <Trash2 size={18} />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  Supprimer la conversation
-                </h3>
-              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Supprimer la conversation
+              </h3>
             </div>
 
             <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
@@ -441,7 +431,7 @@ export default function Ask() {
               <button
                 type="button"
                 onClick={confirmDelete}
-                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600"
+                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-600"
               >
                 Supprimer
               </button>
@@ -451,24 +441,24 @@ export default function Ask() {
       )}
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1A1420] border-t border-slate-200 dark:border-white/10 flex items-center justify-around py-2 z-10">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-[#16121f]/80 backdrop-blur-lg border-t border-slate-200 dark:border-white/10 flex items-center justify-around py-2 z-50">
         <Link
           to="/dashboard"
-          className="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-500 dark:text-slate-400"
+          className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-slate-500 dark:text-slate-400"
         >
           <LayoutDashboard size={20} />
-          <span className="text-[10px]">Dashboard</span>
+          <span className="text-[10px] font-medium">Dashboard</span>
         </Link>
-        <a className="flex flex-col items-center gap-0.5 px-3 py-1 text-pink-600 dark:text-pink-400">
+        <div className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-pink-600 dark:text-pink-400">
           <MessageSquareText size={20} />
-          <span className="text-[10px]">Question</span>
-        </a>
+          <span className="text-[10px] font-medium">Question</span>
+        </div>
         <Link
           to="/analyze"
-          className="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-500 dark:text-slate-400"
+          className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-slate-500 dark:text-slate-400"
         >
           <FileSearch size={20} />
-          <span className="text-[10px]">Analyser</span>
+          <span className="text-[10px] font-medium">Analyser</span>
         </Link>
       </nav>
     </div>

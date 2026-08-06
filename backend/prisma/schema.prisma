@@ -44,12 +44,13 @@ model Document {
 model Analysis {
   id                Int      @id @default(autoincrement())
   documentId        Int      @unique @map("document_id")
-  scoreGlobal        Float    @map("score_global")
+  scoreGlobal       Float    @map("score_global")
   resume            String   @db.Text
   categories        Json
   clausesManquantes Json     @map("clauses_manquantes")
   typeContrat       String?  @map("type_contrat")
   typeContratLabel  String?  @map("type_contrat_label")
+  analysisDegraded  Boolean  @default(false) @map("analysis_degraded")
   createdAt         DateTime @default(now()) @map("created_at")
 
   document          Document  @relation(fields: [documentId], references: [id])
@@ -59,18 +60,20 @@ model Analysis {
 }
 
 model Finding {
-  id              Int      @id @default(autoincrement())
-  analysisId      Int      @map("analysis_id")
-  clause          String
-  severite        String   // "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
-  categorie       String?
-  description     String   @db.Text
-  referenceLegale String?  @map("reference_legale")
+  id                    Int      @id @default(autoincrement())
+  analysisId            Int      @map("analysis_id")
+  clause                String
+  severite              String
+  categorie             String?
+  description           String   @db.Text
+  referenceLegale       String?  @map("reference_legale")
+  referenceHallucinated Boolean  @default(false) @map("reference_hallucinated")
 
   analysis        Analysis @relation(fields: [analysisId], references: [id])
   suggestedClause String? @map("suggested_clause") @db.Text
   @@map("findings")
 }
+
 
 model Conversation {
   id        Int      @id @default(autoincrement())

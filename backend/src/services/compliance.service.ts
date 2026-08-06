@@ -344,11 +344,12 @@ export async function getDashboardStats(userId: number) {
   }));
 
   // 5 risques haute sévérité les plus récents (tous documents confondus)
-    // Les valeurs persistées sont "CRITICAL" ou "HIGH".
-    const allHighRisks = analyzedDocs
-      .flatMap((d) =>
-        (d.analysis?.findings || [])
-          .filter((f) => f.severite === "CRITICAL" || f.severite === "HIGH")
+  // Les valeurs persistées sont "CRITICAL" ou "HIGH".
+  const allHighRisks = analyzedDocs
+    .flatMap((d) =>
+      (d.analysis?.findings || [])
+        .filter((f) => f.severite === "CRITICAL" || f.severite === "HIGH")
+        .map((f) => ({
           ...f,
           documentId: d.id,
           documentFilename: d.filename,

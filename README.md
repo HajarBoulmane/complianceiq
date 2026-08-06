@@ -214,14 +214,3 @@ docker compose up -d
 
 ---
 
-## Author
-
-**Hajar Boulmane**
-
-Software Engineering Student specializing in AI, Cloud, DevOps, and Backend Engineering.
-
----
-
-## License
-
-This project is licensed under the MIT License.

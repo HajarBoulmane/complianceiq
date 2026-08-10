@@ -13,4 +13,9 @@ export default defineConfig({
       },
     },
   },
+   preview: {
+    allowedHosts: ["complianceiq.up.railway.app"],
+    host: true,
+  },
+
 });

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { registerUser, loginUser } from "../services/auth.service";
+import { registerUser, loginUser, loginWithGoogle, verifyUserCode } from "../services/auth.service";
 import prisma from "../prisma";
 
 export async function register(req: Request, res: Response) {
@@ -81,5 +81,26 @@ export async function getMe(req: Request, res: Response) {
     return res.status(200).json({ user });
   } catch (err) {
     return res.status(500).json({ error: "Server error" });
+  }
+}
+
+export async function verifyEmailHandler(req: Request, res: Response) {
+  try {
+    const { email, code } = req.body;
+    await verifyUserCode(email, code);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+export async function googleAuthHandler(req: Request, res: Response) {
+  try {
+    const { idToken } = req.body;
+    const { user, token } = await loginWithGoogle(idToken);
+    res.cookie("token", token, { httpOnly: true /* tes options existantes */ });
+    res.json({ user });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 }

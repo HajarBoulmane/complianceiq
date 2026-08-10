@@ -7,6 +7,7 @@ import Analyze from "./pages/Analyze";
 import Ask from "./pages/Ask";
 import Notifications from "./pages/Notifications";
 import Parametres from "./pages/Parametres";
+import VerifyEmail from "./pages/VerifyEmail";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
     <Route path="/analyze" element={<ProtectedRoute><Analyze /></ProtectedRoute>} />
     <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
     <Route path="/parametres" element={<ProtectedRoute><Parametres /></ProtectedRoute>} />
+    <Route path="/verify-email" element={<VerifyEmail />} />
     </Routes>
   );
 }

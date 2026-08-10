@@ -39,3 +39,15 @@ export const getCurrentUser = () =>
   apiClient<{ user: User }>("/auth/me", {
     method: "GET",
   });
+
+export const verifyCode = (payload: { email: string; code: string }) =>
+  apiClient<{ success: boolean }>("/auth/verify-email", {
+    method: "POST",
+    body: payload,
+  });
+
+export const googleLogin = (idToken: string) =>
+  apiClient<{ user: User }>("/auth/google", {
+    method: "POST",
+    body: { idToken },
+  });

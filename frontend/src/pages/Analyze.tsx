@@ -25,38 +25,53 @@ import {
   X,
   Copy,
   Check,
-  ArrowRight,
+  ArrowLeft,
+  AlertTriangle,
+  ShieldAlert,
+  Shield,
+  FileCheck,
+  Sparkles,
+  Calendar,
+  RefreshCcw,
 } from "lucide-react";
 
-/* ── Minimal severity styles — no colorful icon blobs ── */
+/* ── Severity tokens ── */
 const SEVERITY_STYLES: Record<
   string,
-  { color: string; label: string; dot: string }
+  { color: string; label: string; border: string; bg: string; icon: React.ReactNode }
 > = {
   CRITICAL: {
-    color: "text-red-600 dark:text-red-400",
+    color: "text-red-700 dark:text-red-400",
     label: "Critique",
-    dot: "bg-red-500",
+    border: "border-l-red-500",
+    bg: "bg-red-50 dark:bg-red-500/[0.06]",
+    icon: <ShieldAlert size={14} className="text-red-500" />,
   },
   HIGH: {
-    color: "text-orange-600 dark:text-orange-400",
+    color: "text-orange-700 dark:text-orange-400",
     label: "Haute",
-    dot: "bg-orange-500",
+    border: "border-l-orange-500",
+    bg: "bg-orange-50 dark:bg-orange-500/[0.06]",
+    icon: <AlertTriangle size={14} className="text-orange-500" />,
   },
   MEDIUM: {
-    color: "text-amber-600 dark:text-amber-400",
+    color: "text-amber-700 dark:text-amber-400",
     label: "Moyenne",
-    dot: "bg-amber-500",
+    border: "border-l-amber-500",
+    bg: "bg-amber-50 dark:bg-amber-500/[0.06]",
+    icon: <AlertTriangle size={14} className="text-amber-500" />,
   },
   LOW: {
-    color: "text-slate-500 dark:text-slate-400",
+    color: "text-slate-600 dark:text-slate-400",
     label: "Basse",
-    dot: "bg-slate-400",
+    border: "border-l-slate-400",
+    bg: "bg-slate-50 dark:bg-slate-400/[0.06]",
+    icon: <Shield size={14} className="text-slate-400" />,
   },
 };
 
 const SEVERITY_HEX: Record<Severity, string> = {
-  CRITICAL: "#DC2626",
+  CRITICAL: "#EF4444",
   HIGH: "#F97316",
   MEDIUM: "#F59E0B",
   LOW: "#94A3B8",
@@ -64,20 +79,43 @@ const SEVERITY_HEX: Record<Severity, string> = {
 
 const SEVERITY_ORDER: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
+/* ── Obligation tokens ── */
+const OBLIGATION_LABELS: Record<string, string> = {
+  RENEWAL: "Renouvellement",
+  PAYMENT: "Paiement",
+  NOTICE: "Préavis / dénonciation",
+  OTHER: "Autre échéance",
+};
+
+const OBLIGATION_ICON: Record<string, React.ReactNode> = {
+  RENEWAL: <RefreshCcw size={14} className="text-violet-500" />,
+  PAYMENT: <FileCheck size={14} className="text-emerald-500" />,
+  NOTICE: <Calendar size={14} className="text-orange-500" />,
+  OTHER: <Calendar size={14} className="text-slate-400" />,
+};
+
 const TOOLTIP_STYLE = {
   backgroundColor: "#FFFFFF",
   border: "1px solid #E2E8F0",
-  borderRadius: 8,
-  boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
+  borderRadius: 10,
+  boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.08)",
+  padding: "8px 12px",
+  fontSize: 12,
 };
 
 const CARD =
-  "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.04]";
+  "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.04] shadow-sm dark:shadow-none";
 
 function scoreColor(score: number) {
   if (score < 40) return "#DC2626";
   if (score < 70) return "#F59E0B";
   return "#16A34A";
+}
+
+function scoreLabel(score: number) {
+  if (score < 40) return "Non conforme";
+  if (score < 70) return "À améliorer";
+  return "Conforme";
 }
 
 export default function Analyze() {
@@ -219,8 +257,12 @@ export default function Analyze() {
   const criticalCount = result
     ? result.risques.filter((r) => r.severite === "CRITICAL").length
     : 0;
+  // Fix: on compte les catégories qui ont réellement des problèmes détectés,
+  // pas celles dont le score est tombé sous 40 — avec le clamp backend, une
+  // catégorie avec un seul risque HIGH plafonne à 60, pas 40, et doit quand
+  // même compter comme "à risque".
   const categoriesAtRiskCount = result
-    ? result.categories.filter((c) => c.score < 40).length
+    ? result.categories.filter((c) => c.nb_problemes > 0).length
     : 0;
   const suggestionsCount = result
     ? result.risques.filter((r) => r.clause_suggeree).length
@@ -228,64 +270,76 @@ export default function Analyze() {
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
-            Analyser un contrat
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Collez le texte ou importez un PDF pour vérifier la conformité
-            réglementaire
-          </p>
-        </div>
+      <div className="max-w-4xl mx-auto">
+        {/* ── Header ── */}
+        {!result && (
+          <div className="mb-10 text-center">
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight mb-2">
+              Analyser un contrat
+            </h1>
+            <p className="text-slate-400 text-sm max-w-md mx-auto">
+              Collez le texte ou importez un PDF pour vérifier la conformité réglementaire en quelques secondes
+            </p>
+          </div>
+        )}
 
-        {/* Input form */}
+        {result && (
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
+                Résultat de l'analyse
+              </h1>
+              <p className="text-slate-400 text-sm mt-1">
+                {pdfFile?.name || "Analyse textuelle"}
+              </p>
+            </div>
+            <button
+              onClick={reset}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl transition"
+            >
+              <ArrowLeft size={16} />
+              Nouvelle analyse
+            </button>
+          </div>
+        )}
+
+        {/* ── Input form ── */}
         {!result && !documentId && (
-          <form onSubmit={handleSubmit} className="mb-12">
+          <form onSubmit={handleSubmit} className="mb-12 max-w-2xl mx-auto">
             {/* Mode tabs */}
-            <div className="flex gap-1 mb-4 border-b border-slate-100 dark:border-white/5 pb-px">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("text");
-                  clearPdf();
-                }}
-                className={`px-3 py-2 text-sm font-medium transition relative ${
-                  mode === "text"
-                    ? "text-slate-900 dark:text-white"
-                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                }`}
-              >
-                Texte
-                {mode === "text" && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 dark:bg-white rounded-full" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("pdf")}
-                className={`px-3 py-2 text-sm font-medium transition relative ${
-                  mode === "pdf"
-                    ? "text-slate-900 dark:text-white"
-                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                }`}
-              >
-                PDF
-                {mode === "pdf" && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 dark:bg-white rounded-full" />
-                )}
-              </button>
+            <div className="flex justify-center gap-1 mb-6 p-1 bg-slate-100 dark:bg-white/5 rounded-xl w-fit mx-auto">
+              {(["text", "pdf"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setMode(m);
+                    if (m === "text") clearPdf();
+                  }}
+                  className={`px-5 py-2 text-sm font-medium rounded-lg transition ${
+                    mode === m
+                      ? "bg-white dark:bg-[#1e1a2e] text-slate-900 dark:text-white shadow-sm"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                >
+                  {m === "text" ? "Texte brut" : "Fichier PDF"}
+                </button>
+              ))}
             </div>
 
             {mode === "text" && (
-              <textarea
-                value={contractText}
-                onChange={(e) => setContractText(e.target.value)}
-                placeholder="Collez ici le texte complet du contrat..."
-                rows={10}
-                className="w-full bg-transparent border border-slate-200 dark:border-white/10 focus:border-slate-400 dark:focus:border-white/20 rounded-2xl p-4 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none resize-none text-sm mb-4 transition"
-              />
+              <div className="relative">
+                <textarea
+                  value={contractText}
+                  onChange={(e) => setContractText(e.target.value)}
+                  placeholder="Collez ici le texte complet du contrat..."
+                  rows={12}
+                  className="w-full bg-white dark:bg-[#16121f] border border-slate-200 dark:border-white/10 focus:border-slate-400 dark:focus:border-white/25 rounded-2xl p-5 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none resize-none text-sm leading-relaxed shadow-sm transition"
+                />
+                <div className="absolute bottom-4 right-4 text-xs text-slate-400 tabular-nums">
+                  {contractText.length.toLocaleString()} caractères
+                </div>
+              </div>
             )}
 
             {mode === "pdf" && (
@@ -295,17 +349,19 @@ export default function Analyze() {
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full border border-dashed border-slate-200 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/30 rounded-2xl p-10 md:p-14 flex flex-col items-center justify-center text-center cursor-pointer transition bg-transparent"
+                    className="w-full border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-slate-400 dark:hover:border-white/25 rounded-2xl p-12 md:p-16 flex flex-col items-center justify-center text-center cursor-pointer transition bg-white dark:bg-[#16121f] shadow-sm"
                   >
-                    <Upload
-                      size={24}
-                      className="text-slate-400 mb-3"
-                      strokeWidth={1.5}
-                    />
-                    <p className="text-slate-600 dark:text-slate-300 text-sm mb-1">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-4">
+                      <Upload
+                        size={24}
+                        className="text-slate-500 dark:text-slate-400"
+                        strokeWidth={1.5}
+                      />
+                    </div>
+                    <p className="text-slate-700 dark:text-slate-200 text-sm font-medium mb-1">
                       Glissez-déposez un PDF, ou cliquez pour parcourir
                     </p>
-                    <p className="text-slate-400 text-xs">.pdf uniquement</p>
+                    <p className="text-slate-400 text-xs">Format accepté : .pdf</p>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -318,35 +374,37 @@ export default function Analyze() {
                     />
                   </div>
                 ) : (
-                  <div
-                    className={`${CARD} p-4 flex items-center gap-3`}
-                  >
-                    <FileText
-                      size={18}
-                      className="text-slate-400 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-slate-900 dark:text-white text-sm truncate">
-                        {pdfFile.name}
-                      </p>
-                      <p className="text-slate-400 text-xs">
-                        {extracting
-                          ? "Extraction..."
-                          : `${contractText.length.toLocaleString()} caractères`}
-                      </p>
+                  <div className={`${CARD} p-5`}>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center shrink-0">
+                        <FileText
+                          size={22}
+                          className="text-red-500"
+                          strokeWidth={1.5}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-slate-900 dark:text-white text-sm font-medium truncate">
+                          {pdfFile.name}
+                        </p>
+                        <p className="text-slate-400 text-xs mt-0.5">
+                          {extracting
+                            ? "Extraction du texte en cours..."
+                            : `${contractText.length.toLocaleString()} caractères extraits`}
+                        </p>
+                      </div>
+                      {extracting ? (
+                        <div className="w-5 h-5 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin shrink-0" />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={clearPdf}
+                          className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition shrink-0"
+                        >
+                          <X size={18} />
+                        </button>
+                      )}
                     </div>
-                    {extracting ? (
-                      <div className="w-4 h-4 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin shrink-0" />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={clearPdf}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white transition shrink-0"
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
@@ -355,151 +413,179 @@ export default function Analyze() {
             <button
               type="submit"
               disabled={loading || extracting || !contractText.trim()}
-              className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-medium py-3 rounded-xl hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+              className="w-full mt-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold py-3.5 rounded-xl hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition text-sm shadow-lg shadow-slate-900/10 dark:shadow-white/10"
             >
-              {loading ? "Analyse en cours..." : "Lancer l'analyse"}
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 dark:border-slate-900/30 border-t-transparent rounded-full animate-spin" />
+                  Analyse en cours...
+                </span>
+              ) : (
+                "Lancer l'analyse"
+              )}
             </button>
           </form>
         )}
 
+        {/* ── Loading ── */}
         {loading && (
-          <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-sm mb-8">
-            <div className="w-4 h-4 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin" />
-            {documentId
-              ? "Chargement de l'analyse..."
-              : "Analyse en cours..."}
+          <div className="flex flex-col items-center gap-4 py-16 text-slate-500 dark:text-slate-400">
+            <div className="w-8 h-8 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm">
+              {documentId ? "Chargement de l'analyse..." : "Analyse en cours..."}
+            </p>
           </div>
         )}
 
+        {/* ── Error ── */}
         {error && (
-          <p className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl px-4 py-3 mb-8">
-            {error}
-          </p>
+          <div className="max-w-2xl mx-auto mb-8 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/15 rounded-xl px-5 py-4 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
+            <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
+          </div>
         )}
 
-        {/* Results */}
+        {/* ═══════════════════════════════════════
+            RESULTS
+        ═══════════════════════════════════════ */}
         {result && (
-          <div className="space-y-8">
-            <button
-              onClick={reset}
-              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center gap-1"
-            >
-              <ArrowRight size={12} className="rotate-180" />
-              Nouvelle analyse
-            </button>
-
-            {/* Score + Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div
-                className={`${CARD} p-6 flex flex-col items-center justify-center aspect-square md:aspect-auto`}
-              >
-                <ResponsiveContainer width={120} height={120}>
-                  <PieChart>
-                    <Pie
-                      data={donutData}
-                      dataKey="value"
-                      innerRadius={42}
-                      outerRadius={58}
-                      startAngle={90}
-                      endAngle={-270}
-                      stroke="none"
+          <div className="space-y-6">
+            {/* ── Top row: Score + Summary ── */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+              {/* Score card */}
+              <div className={`${CARD} md:col-span-4 p-6 flex flex-col items-center justify-center`}>
+                <div className="relative">
+                  <ResponsiveContainer width={140} height={140}>
+                    <PieChart>
+                      <Pie
+                        data={donutData}
+                        dataKey="value"
+                        innerRadius={50}
+                        outerRadius={68}
+                        startAngle={90}
+                        endAngle={-270}
+                        stroke="none"
+                      >
+                        <Cell fill={scoreColor(result.score_global)} />
+                        <Cell fill="#E2E8F0" className="dark:fill-[#1e1a2e]" />
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span
+                      className="text-3xl font-bold tabular-nums"
+                      style={{ color: scoreColor(result.score_global) }}
                     >
-                      <Cell fill={scoreColor(result.score_global)} />
-                      <Cell fill="#E2E8F0" className="dark:fill-[#1e1a2e]" />
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <p
-                  className="text-3xl font-semibold -mt-28 mb-20 tabular-nums"
-                  style={{ color: scoreColor(result.score_global) }}
-                >
-                  {result.score_global}%
+                      {result.score_global}%
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-3">
+                  {scoreLabel(result.score_global)}
                 </p>
-                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium">
-                  Score global
-                </p>
+                <p className="text-[11px] text-slate-400 mt-1">Score global</p>
               </div>
 
-              <div className={`${CARD} md:col-span-2 p-6`}>
-                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-3">
-                  Résumé
-                </p>
+              {/* Summary card */}
+              <div className={`${CARD} md:col-span-8 p-6 flex flex-col justify-center`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <FileCheck size={16} className="text-slate-400" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Résumé de l'analyse
+                  </p>
+                </div>
                 <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
                   {result.resume}
                 </p>
               </div>
             </div>
 
-            {/* Metrics — flat, minimal */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* ── Metrics ── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: "Risques critiques", value: criticalCount },
-                { label: "Clauses manquantes", value: result.clauses_manquantes.length },
-                { label: "Catégories à risque", value: `${categoriesAtRiskCount}/${result.categories.length}` },
-                { label: "Reformulations", value: suggestionsCount },
+                {
+                  label: "Risques critiques",
+                  value: criticalCount,
+                  accent: criticalCount > 0 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-white",
+                },
+                {
+                  label: "Clauses manquantes",
+                  value: result.clauses_manquantes.length,
+                  accent: result.clauses_manquantes.length > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-white",
+                },
+                {
+                  label: "Catégories à risque",
+                  value: `${categoriesAtRiskCount}/${result.categories.length}`,
+                  accent: categoriesAtRiskCount > 0 ? "text-orange-600 dark:text-orange-400" : "text-slate-900 dark:text-white",
+                },
+                {
+                  label: "Reformulations",
+                  value: suggestionsCount,
+                  accent: "text-emerald-600 dark:text-emerald-400",
+                },
               ].map((m, i) => (
-                <div key={i} className={`${CARD} p-4`}>
-                  <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-1">
+                <div key={i} className={`${CARD} p-5`}>
+                  <p className="text-slate-400 text-[11px] uppercase tracking-wider font-semibold mb-2">
                     {m.label}
                   </p>
-                  <p className="text-xl font-semibold text-slate-900 dark:text-white tabular-nums">
+                  <p className={`text-2xl font-bold tabular-nums ${m.accent}`}>
                     {m.value}
                   </p>
                 </div>
               ))}
             </div>
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className={`${CARD} p-5`}>
-                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
+            {/* ── Charts ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Category scores */}
+              <div className={`${CARD} p-6`}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-5">
                   Scores par catégorie
                 </p>
-                <div className="min-w-[260px]">
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart
-                      data={result.categories}
-                      layout="vertical"
-                      margin={{ left: 10 }}
-                    >
-                      <XAxis type="number" domain={[0, 100]} hide />
-                      <YAxis
-                        type="category"
-                        dataKey="nom"
-                        width={120}
-                        tick={{ fill: "#94A3B8", fontSize: 11 }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip contentStyle={TOOLTIP_STYLE} />
-                      <Bar
-                        dataKey="score"
-                        radius={[0, 4, 4, 0]}
-                        barSize={14}
-                      >
-                        {result.categories.map((cat, i) => (
-                          <Cell key={i} fill={scoreColor(cat.score)} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart
+                    data={result.categories}
+                    layout="vertical"
+                    margin={{ left: 0, right: 20 }}
+                  >
+                    <XAxis type="number" domain={[0, 100]} hide />
+                    <YAxis
+                      type="category"
+                      dataKey="nom"
+                      width={130}
+                      tick={{ fill: "#64748B", fontSize: 11, fontWeight: 500 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      formatter={(value: number) => [`${value}%`, "Score"]}
+                    />
+                    <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={16}>
+                      {result.categories.map((cat, i) => (
+                        <Cell key={i} fill={scoreColor(cat.score)} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
 
-              <div className={`${CARD} p-5`}>
-                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
+              {/* Risk distribution */}
+              <div className={`${CARD} p-6`}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-5">
                   Répartition des risques
                 </p>
                 {severityData.length > 0 ? (
-                  <div className="flex items-center gap-6">
-                    <ResponsiveContainer width={120} height={120}>
+                  <div className="flex items-center gap-8">
+                    <ResponsiveContainer width={130} height={130}>
                       <PieChart>
                         <Pie
                           data={severityData}
                           dataKey="value"
-                          innerRadius={36}
-                          outerRadius={54}
+                          innerRadius={40}
+                          outerRadius={60}
                           stroke="none"
+                          paddingAngle={2}
                         >
                           {severityData.map((d, i) => (
                             <Cell key={i} fill={SEVERITY_HEX[d.severity]} />
@@ -508,22 +594,17 @@ export default function Analyze() {
                         <Tooltip contentStyle={TOOLTIP_STYLE} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="space-y-2 flex-1">
+                    <div className="space-y-3 flex-1">
                       {severityData.map((d, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center gap-2 text-xs"
-                        >
+                        <div key={i} className="flex items-center gap-3 text-sm">
                           <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{
-                              backgroundColor: SEVERITY_HEX[d.severity],
-                            }}
+                            className="w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: SEVERITY_HEX[d.severity] }}
                           />
                           <span className="text-slate-500 dark:text-slate-400 flex-1">
                             {d.name}
                           </span>
-                          <span className="text-slate-900 dark:text-white font-medium tabular-nums">
+                          <span className="text-slate-900 dark:text-white font-bold tabular-nums min-w-[1.5rem] text-right">
                             {d.value}
                           </span>
                         </div>
@@ -531,26 +612,82 @@ export default function Analyze() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-[120px] flex items-center text-emerald-600 dark:text-emerald-400 text-sm">
+                  <div className="h-[130px] flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-sm font-medium gap-2">
+                    <Shield size={18} />
                     Aucun risque identifié
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Missing clauses */}
+            {/* ── Obligations / échéances ── */}
+            {result.obligations && result.obligations.length > 0 && (
+              <div className={`${CARD} p-6`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar size={16} className="text-violet-500" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Échéances
+                  </p>
+                  <span className="ml-auto text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
+                    {result.obligations.length}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {result.obligations.map((obl, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 border border-slate-100 dark:border-white/[0.06] rounded-xl p-4"
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {OBLIGATION_ICON[obl.type] || OBLIGATION_ICON.OTHER}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-slate-900 dark:text-white text-sm font-medium">
+                          {obl.description}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            {OBLIGATION_LABELS[obl.type] || obl.type}
+                          </span>
+                          {obl.date_echeance && (
+                            <>
+                              <span className="text-slate-300 dark:text-slate-600">·</span>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                {new Date(obl.date_echeance).toLocaleDateString("fr-FR", {
+                                  day: "2-digit",
+                                  month: "long",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Missing clauses ── */}
             {result.clauses_manquantes.length > 0 && (
-              <div className={`${CARD} p-5`}>
-                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-4">
-                  Clauses manquantes
-                </p>
+              <div className={`${CARD} p-6`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <AlertTriangle size={16} className="text-amber-500" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Clauses manquantes
+                  </p>
+                  <span className="ml-auto text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
+                    {result.clauses_manquantes.length}
+                  </span>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {result.clauses_manquantes.map((clause, i) => (
                     <span
                       key={i}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5"
+                      className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-lg px-3.5 py-2"
                     >
-                      <span className="w-1 h-1 rounded-full bg-slate-400" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                       {clause}
                     </span>
                   ))}
@@ -558,63 +695,83 @@ export default function Analyze() {
               </div>
             )}
 
-            {/* Risks */}
+            {/* ── Risks ── */}
             {sortedRisques.length > 0 && (
-              <div>
-                <p className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-3">
-                  Risques identifiés
-                </p>
-                <div className="space-y-2">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-slate-400" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Risques identifiés
+                  </p>
+                  <span className="ml-auto text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
+                    {sortedRisques.length}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
                   {sortedRisques.map((risque, i) => {
                     const style =
-                      SEVERITY_STYLES[risque.severite] ||
-                      SEVERITY_STYLES.LOW;
+                      SEVERITY_STYLES[risque.severite] || SEVERITY_STYLES.LOW;
                     return (
                       <div
                         key={i}
-                        className={`${CARD} p-4 hover:border-slate-200 dark:hover:border-white/10 transition`}
+                        className={`${CARD} border-l-4 ${style.border} p-5 hover:shadow-md transition-shadow`}
                       >
-                        <div className="flex items-center gap-2 mb-1">
+                        {/* Header */}
+                        <div className="flex items-center gap-2 mb-2">
+                          {style.icon}
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${style.dot}`}
-                          />
-                          <span
-                            className={`text-[10px] uppercase tracking-wider font-semibold ${style.color}`}
+                            className={`text-[11px] uppercase tracking-wider font-bold ${style.color}`}
                           >
                             {style.label}
                           </span>
                         </div>
-                        <p className="text-slate-900 dark:text-white text-sm font-medium mb-1">
+
+                        {/* Clause */}
+                        <p className="text-slate-900 dark:text-white text-sm font-semibold mb-1.5">
                           {risque.clause}
                         </p>
+
+                        {/* Description */}
                         <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
                           {risque.description}
                         </p>
+
+                        {/* Legal ref */}
                         {risque.reference_legale && (
-                          <p className="text-slate-400 text-xs mt-2">
+                          <p className="text-slate-400 text-xs mt-3 font-mono bg-slate-50 dark:bg-white/[0.03] inline-block px-2 py-1 rounded-md">
                             Réf: {risque.reference_legale}
                           </p>
                         )}
+
+                        {/* Suggested rewrite */}
                         {risque.clause_suggeree && (
-                          <div className="mt-3 bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/[0.06] rounded-xl p-3">
-                            <div className="flex items-center justify-between gap-2 mb-1.5">
-                              <p className="text-slate-400 text-[10px] uppercase tracking-wider font-medium">
-                                Reformulation suggérée
-                              </p>
+                          <div className={`mt-4 ${style.bg} border border-slate-100 dark:border-white/[0.06] rounded-xl p-4`}>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-1.5">
+                                <Sparkles size={12} className="text-slate-400" />
+                                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold">
+                                  Reformulation suggérée
+                                </p>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() =>
                                   handleCopy(risque.clause_suggeree!, i)
                                 }
-                                className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition"
+                                className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition ${
+                                  copiedIndex === i
+                                    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10"
+                                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+                                }`}
                               >
                                 {copiedIndex === i ? (
                                   <>
-                                    <Check size={11} /> Copié
+                                    <Check size={12} /> Copié
                                   </>
                                 ) : (
                                   <>
-                                    <Copy size={11} /> Copier
+                                    <Copy size={12} /> Copier
                                   </>
                                 )}
                               </button>
@@ -628,6 +785,21 @@ export default function Analyze() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* ── Empty state if no risks ── */}
+            {sortedRisques.length === 0 && result.clauses_manquantes.length === 0 && (
+              <div className={`${CARD} p-10 text-center`}>
+                <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+                  <Shield size={28} className="text-emerald-500" />
+                </div>
+                <p className="text-slate-900 dark:text-white font-semibold mb-1">
+                  Aucun problème détecté
+                </p>
+                <p className="text-slate-400 text-sm">
+                  Le contrat semble conforme aux exigences réglementaires analysées.
+                </p>
               </div>
             )}
           </div>

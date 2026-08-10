@@ -15,10 +15,14 @@ datasource db {
 model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
-  passwordHash String   @map("password_hash")
+  passwordHash String?   @map("password_hash")
   fullName     String?  @map("full_name")
   role         String   @default("user")
   createdAt    DateTime @default(now()) @map("created_at")
+  googleId               String?   @unique
+  isVerified             Boolean   @default(false)
+  verificationCode       String?
+  verificationCodeExpiry DateTime?
 
   documents     Document[]
   conversations Conversation[]

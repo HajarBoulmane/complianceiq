@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { loginUser } from "../api/auth";
+import { GoogleLogin } from "@react-oauth/google";
+import { loginUser, googleLogin } from "../api/auth";
 import { useAuth } from "../context/authContext";
 
 export default function Login() {
@@ -29,6 +30,18 @@ export default function Login() {
     }
   };
 
+  const handleGoogleSuccess = async (credentialResponse: unknown) => {
+    setError(null);
+    try {
+      const data = await googleLogin((credentialResponse as { credential: string }).credential);
+      setUser(data.user);
+      navigate("/dashboard");
+    } catch (err) {
+      setError("Erreur lors de la connexion Google");
+      console.error("Erreur Google login:", err);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0B1120] px-4">
       <div className="w-full max-w-md">
@@ -41,57 +54,69 @@ export default function Login() {
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="bg-[#141B2E] border border-white/10 rounded-xl p-8 shadow-xl"
-        >
-          <div className="mb-5">
-            <label className="block text-sm text-slate-300 mb-1.5">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="vous@entreprise.com"
-              required
-              className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
+        <div className="bg-[#141B2E] border border-white/10 rounded-xl p-8 shadow-xl">
+          <div className="mb-5 flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError("Échec de la connexion Google")}
             />
           </div>
 
-          <div className="mb-5">
-            <label className="block text-sm text-slate-300 mb-1.5">Mot de passe</label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 pr-11 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-xs text-slate-500">OU</span>
+            <div className="flex-1 h-px bg-white/10" />
           </div>
 
-          {error && (
-            <p className="text-red-400 text-sm mb-4 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
+          <form onSubmit={handleSubmit}>
+            <div className="mb-5">
+              <label className="block text-sm text-slate-300 mb-1.5">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="vous@entreprise.com"
+                required
+                className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
-          >
-            {loading ? "Connexion..." : "Se connecter"}
-          </button>
+            <div className="mb-5">
+              <label className="block text-sm text-slate-300 mb-1.5">Mot de passe</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 pr-11 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-red-400 text-sm mb-4 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
+            >
+              {loading ? "Connexion..." : "Se connecter"}
+            </button>
+          </form>
 
           <p className="text-center text-sm text-slate-400 mt-5">
             Pas encore de compte ?{" "}
@@ -99,7 +124,7 @@ export default function Login() {
               Créer un compte
             </a>
           </p>
-        </form>
+        </div>
       </div>
     </div>
   );

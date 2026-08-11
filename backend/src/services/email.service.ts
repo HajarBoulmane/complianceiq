@@ -9,7 +9,7 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_APP_PASSWORD,
   },
-  family: 4, // force IPv4, évite ENETUNREACH sur Railway
+  family: 4, 
 } as SMTPTransport.Options);
 
 export async function sendVerificationEmail(to: string, code: string) {

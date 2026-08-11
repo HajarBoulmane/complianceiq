@@ -1,8 +1,10 @@
+import "dotenv/config";
 import path from "path";
 import { loadAllPdfsFromDir } from "./ingestion/loader";
 import { chunkText } from "./chunking/chunker";
 import { embedText } from "./embeddings/embedder";
 import { addVectors, VectorRecord } from "./vectordb/chromaClient";
+
 
 async function main() {
   const dataDir = path.join(__dirname, "..", "data", "raw");

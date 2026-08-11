@@ -158,6 +158,9 @@ export default function Ask() {
   const cardBase =
     "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.06] shadow-sm";
 
+  const responseBubble =
+    "bg-slate-50 dark:bg-[#1f1a2e] rounded-2xl border border-slate-100 dark:border-white/[0.08] shadow-sm";
+
   return (
     <div className="h-screen bg-[#f8f7fb] dark:bg-[#0a0614] flex overflow-hidden transition-colors duration-300">
       {/* ═══════════════════════════════════════
@@ -308,7 +311,7 @@ export default function Ask() {
                       ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900"
                       : msg.error
                         ? "bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400"
-                        : `${cardBase}`
+                        : responseBubble
                   }`}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed text-sm">
@@ -365,7 +368,7 @@ export default function Ask() {
                 <div className={`shrink-0 w-8 h-8 rounded-lg ${ACCENT.light} ${ACCENT.text} flex items-center justify-center`}>
                   <MessageSquareText size={15} />
                 </div>
-                <div className={`${cardBase} rounded-2xl px-4 py-3 flex items-center gap-2`}>
+                <div className={`${responseBubble} rounded-2xl px-4 py-3 flex items-center gap-2`}>
                   <div className="w-3.5 h-3.5 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
                   <span className="text-slate-400 text-sm">Recherche dans la base réglementaire...</span>
                 </div>

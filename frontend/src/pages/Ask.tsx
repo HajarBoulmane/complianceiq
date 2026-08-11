@@ -312,7 +312,7 @@ export default function Ask() {
                       ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900"
                       : msg.error
                         ? "bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400"
-                        : responseBubble
+                        : `${responseBubble} text-slate-800 dark:text-white`
                   }`}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed text-sm">

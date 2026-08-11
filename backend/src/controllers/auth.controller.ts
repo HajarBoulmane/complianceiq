@@ -11,15 +11,9 @@ export async function register(req: Request, res: Response) {
 
     const { user, token } = await registerUser(email, password, fullName);
 
-    res.cookie("token", token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  maxAge: 24 * 60 * 60 * 1000,
-});
-
     return res.status(201).json({
       user: { id: user.id, email: user.email, role: user.role },
+      token,
     });
   } catch (err: any) {
     if (err.message === "EMAIL_ALREADY_EXISTS") {
@@ -38,15 +32,9 @@ export async function login(req: Request, res: Response) {
 
     const { user, token } = await loginUser(email, password);
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
-
     return res.status(200).json({
       user: { id: user.id, email: user.email, role: user.role },
+      token,
     });
   } catch (err: any) {
     if (err.message === "INVALID_CREDENTIALS") {
@@ -56,8 +44,8 @@ export async function login(req: Request, res: Response) {
   }
 }
 
-export function logout(req: Request, res: Response) {
-  res.clearCookie("token");
+export function logout(_req: Request, res: Response) {
+  // rien à faire côté serveur, le frontend supprime le token stocké localement
   return res.status(200).json({ message: "Logged out" });
 }
 
@@ -98,13 +86,10 @@ export async function googleAuthHandler(req: Request, res: Response) {
   try {
     const { idToken } = req.body;
     const { user, token } = await loginWithGoogle(idToken);
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+    res.json({
+      user: { id: user.id, email: user.email, role: user.role },
+      token,
     });
-    res.json({ user });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

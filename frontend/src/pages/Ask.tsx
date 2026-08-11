@@ -158,9 +158,9 @@ export default function Ask() {
   const cardBase =
     "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.06] shadow-sm";
 
-  /* ── CHANGED: response bubble color ── */
+  /* ── CHANGED: response bubble for BOTH light & dark mode ── */
   const responseBubble =
-    "bg-pink-50/60 dark:bg-[#1f1a2e] rounded-2xl border border-pink-100 dark:border-pink-500/10 shadow-sm";
+    "bg-pink-50 dark:bg-[#24182e] rounded-2xl border border-pink-200 dark:border-pink-500/20 shadow-sm";
 
   return (
     <div className="h-screen bg-[#f8f7fb] dark:bg-[#0a0614] flex overflow-hidden transition-colors duration-300">
@@ -324,12 +324,12 @@ export default function Ask() {
                       className={`mt-3 pt-3 border-t space-y-2 ${
                         msg.role === "user"
                           ? "border-white/20"
-                          : "border-pink-100 dark:border-white/10"
+                          : "border-pink-200 dark:border-pink-500/20"
                       }`}
                     >
                       <p
                         className={`text-[11px] uppercase tracking-wider font-semibold ${
-                          msg.role === "user" ? "text-white/60" : "text-slate-400"
+                          msg.role === "user" ? "text-white/60" : "text-pink-500/70 dark:text-pink-400/70"
                         }`}
                       >
                         Sources consultées

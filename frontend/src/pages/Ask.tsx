@@ -158,8 +158,9 @@ export default function Ask() {
   const cardBase =
     "bg-white dark:bg-[#16121f] rounded-2xl border border-slate-100 dark:border-white/[0.06] shadow-sm";
 
+  /* ── CHANGED: response bubble color ── */
   const responseBubble =
-    "bg-slate-50 dark:bg-[#1f1a2e] rounded-2xl border border-slate-100 dark:border-white/[0.08] shadow-sm";
+    "bg-pink-50/60 dark:bg-[#1f1a2e] rounded-2xl border border-pink-100 dark:border-pink-500/10 shadow-sm";
 
   return (
     <div className="h-screen bg-[#f8f7fb] dark:bg-[#0a0614] flex overflow-hidden transition-colors duration-300">
@@ -323,7 +324,7 @@ export default function Ask() {
                       className={`mt-3 pt-3 border-t space-y-2 ${
                         msg.role === "user"
                           ? "border-white/20"
-                          : "border-slate-100 dark:border-white/10"
+                          : "border-pink-100 dark:border-white/10"
                       }`}
                     >
                       <p
@@ -337,7 +338,7 @@ export default function Ask() {
                         <div
                           key={i}
                           className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                            msg.role === "user" ? "bg-white/10" : "bg-slate-50 dark:bg-white/5"
+                            msg.role === "user" ? "bg-white/10" : "bg-white dark:bg-white/5"
                           }`}
                         >
                           <FileText size={14} className="shrink-0 text-pink-400" />

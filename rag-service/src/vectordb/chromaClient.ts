@@ -2,8 +2,13 @@ import { ChromaClient } from "chromadb";
 
 const CHROMA_URL = process.env.CHROMA_URL || "http://localhost:8000";
 
+// ⬇️ Parse l'URL pour extraire host/port/ssl
+const parsedUrl = new URL(CHROMA_URL);
+
 const client = new ChromaClient({
-  path: CHROMA_URL,
+  host: parsedUrl.hostname,
+  port: parsedUrl.port ? parseInt(parsedUrl.port) : (parsedUrl.protocol === "https:" ? 443 : 80),
+  ssl: parsedUrl.protocol === "https:",
 });
 
 const COLLECTION_NAME = "complianceiq_regulations";

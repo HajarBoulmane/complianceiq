@@ -55,7 +55,6 @@ function daysUntil(dueDate: string) {
     (new Date(dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
 }
-
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [obligations, setObligations] = useState<Obligation[]>([]);
@@ -72,13 +71,24 @@ export default function Dashboard() {
       .catch((err) => console.error("Erreur chargement obligations:", err));
   }, []);
 
-  const conformiteData = stats
-    ? [
-        { name: "Conforme", value: stats.conformeCount },
-        { name: "À vérifier", value: stats.moyenCount },
-        { name: "À risque", value: stats.risqueCount },
-      ]
-    : [];
+  // Valeurs par défaut si stats est null (erreur ou chargement)
+  const safeStats: DashboardStats = stats ?? {
+    avgScore: 0,
+    totalDocuments: 0,
+    conformeCount: 0,
+    moyenCount: 0,
+    risqueCount: 0,
+    monthlyActivity: [],
+    categoriesAvg: [],
+    recentDocuments: [],
+    recentHighRisks: [],
+  };
+
+  const conformiteData = [
+    { name: "Conforme", value: safeStats.conformeCount },
+    { name: "À vérifier", value: safeStats.moyenCount },
+    { name: "À risque", value: safeStats.risqueCount },
+  ];
 
   const sortedObligations = [...obligations].sort((a, b) => {
     if (!a.dueDate) return 1;
@@ -90,23 +100,13 @@ export default function Dashboard() {
     (ob) => ob.dueDate && daysUntil(ob.dueDate) < 14
   ).length;
 
-  const hoursSaved = stats
-    ? Math.round((stats.totalDocuments * REVIEW_TIME_MINUTES_PER_DOC) / 6) / 10
-    : 0;
+  const hoursSaved =
+    Math.round((safeStats.totalDocuments * REVIEW_TIME_MINUTES_PER_DOC) / 6) / 10;
 
-  const problemsByCategory = stats
-    ? [...stats.categoriesAvg].sort((a, b) => b.nb_problemes - a.nb_problemes)
-    : [];
+  const problemsByCategory = [...safeStats.categoriesAvg].sort(
+    (a, b) => b.nb_problemes - a.nb_problemes
+  );
 
-  return (
-    <AppLayout>
-      <div className="max-w-6xl mx-auto">
-        {loading && (
-          <div className="flex items-center gap-3 text-slate-400 text-sm mb-6">
-            <div className="w-4 h-4 border-2 border-slate-300 dark:border-white/20 border-t-transparent rounded-full animate-spin" />
-            Chargement...
-          </div>
-        )}
 
         {stats && (
           <>

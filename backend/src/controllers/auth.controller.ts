@@ -98,7 +98,12 @@ export async function googleAuthHandler(req: Request, res: Response) {
   try {
     const { idToken } = req.body;
     const { user, token } = await loginWithGoogle(idToken);
-    res.cookie("token", token, { httpOnly: true /* tes options existantes */ });
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
     res.json({ user });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

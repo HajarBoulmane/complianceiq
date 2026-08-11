@@ -18,22 +18,35 @@ export interface User {
   role: string;
 }
 
-export const registerUser = (payload: RegisterPayload) =>
-  apiClient<{ user: User }>("/auth/register", {
+interface AuthResponse {
+  user: User;
+  token: string;
+}
+
+export const registerUser = async (payload: RegisterPayload) => {
+  const res = await apiClient<AuthResponse>("/auth/register", {
     method: "POST",
     body: payload,
   });
+  localStorage.setItem("token", res.token);
+  return res;
+};
 
-export const loginUser = (payload: LoginPayload) =>
-  apiClient<{ user: User }>("/auth/login", {
+export const loginUser = async (payload: LoginPayload) => {
+  const res = await apiClient<AuthResponse>("/auth/login", {
     method: "POST",
     body: payload,
   });
+  localStorage.setItem("token", res.token);
+  return res;
+};
 
-export const logoutUser = () =>
-  apiClient<{ message: string }>("/auth/logout", {
+export const logoutUser = async () => {
+  localStorage.removeItem("token");
+  return apiClient<{ message: string }>("/auth/logout", {
     method: "POST",
   });
+};
 
 export const getCurrentUser = () =>
   apiClient<{ user: User }>("/auth/me", {
@@ -46,8 +59,11 @@ export const verifyCode = (payload: { email: string; code: string }) =>
     body: payload,
   });
 
-export const googleLogin = (idToken: string) =>
-  apiClient<{ user: User }>("/auth/google", {
+export const googleLogin = async (idToken: string) => {
+  const res = await apiClient<AuthResponse>("/auth/google", {
     method: "POST",
     body: { idToken },
   });
+  localStorage.setItem("token", res.token);
+  return res;
+};

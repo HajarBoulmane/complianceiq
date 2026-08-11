@@ -1,16 +1,20 @@
 import nodemailer from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_APP_PASSWORD,
   },
-});
+  family: 4, // force IPv4, évite ENETUNREACH sur Railway
+} as SMTPTransport.Options);
 
 export async function sendVerificationEmail(to: string, code: string) {
   await transporter.sendMail({
-     from: `"ComplianceIQ" <${process.env.GMAIL_USER}>`,
+    from: `"ComplianceIQ" <${process.env.GMAIL_USER}>`,
     to,
     subject: "Vérifie ton compte ComplianceIQ",
     html: `

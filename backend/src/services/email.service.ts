@@ -1,20 +1,10 @@
-import nodemailer from "nodemailer";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
+import { Resend } from "resend";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_APP_PASSWORD,
-  },
-  family: 4, 
-} as SMTPTransport.Options);
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendVerificationEmail(to: string, code: string) {
-  await transporter.sendMail({
-    from: `"ComplianceIQ" <${process.env.GMAIL_USER}>`,
+  await resend.emails.send({
+    from: "ComplianceIQ <onboarding@resend.dev>", // domaine de test Resend, marche direct sans config DNS
     to,
     subject: "Vérifie ton compte ComplianceIQ",
     html: `

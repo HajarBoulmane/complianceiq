@@ -26,7 +26,8 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.11.0",
     "nodemailer": "^9.0.5",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "resend": "^6.19.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

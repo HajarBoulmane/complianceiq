@@ -14,56 +14,46 @@ export interface LoginPayload {
 export interface User {
   id: number;
   email: string;
-  fullName: string;
+  fullName?: string | null; // login/verify/google ne renvoient pas fullName, seulement /me
   role: string;
 }
 
 interface AuthResponse {
   user: User;
-  token: string;
 }
 
-export const registerUser = async (payload: RegisterPayload) => {
-  const res = await apiClient<AuthResponse>("/auth/register", {
+export const registerUser = (payload: RegisterPayload) =>
+  apiClient<{ message: string; email: string }>("/auth/register", {
     method: "POST",
     body: payload,
   });
-  localStorage.setItem("token", res.token);
-  return res;
-};
 
-export const loginUser = async (payload: LoginPayload) => {
-  const res = await apiClient<AuthResponse>("/auth/login", {
+export const loginUser = (payload: LoginPayload) =>
+  apiClient<AuthResponse>("/auth/login", {
     method: "POST",
     body: payload,
   });
-  localStorage.setItem("token", res.token);
-  return res;
-};
 
-export const logoutUser = async () => {
-  localStorage.removeItem("token");
-  return apiClient<{ message: string }>("/auth/logout", {
-    method: "POST",
-  });
-};
+export const logoutUser = () =>
+  apiClient<{ message: string }>("/auth/logout", { method: "POST" });
 
 export const getCurrentUser = () =>
-  apiClient<{ user: User }>("/auth/me", {
-    method: "GET",
-  });
+  apiClient<{ user: User }>("/auth/me", { method: "GET" });
 
-export const verifyCode = (payload: { email: string; code: string }) =>
-  apiClient<{ success: boolean }>("/auth/verify-email", {
+export const verifyEmail = (email: string, code: string) =>
+  apiClient<AuthResponse>("/auth/verify-email", {
     method: "POST",
-    body: payload,
+    body: { email, code },
   });
 
-export const googleLogin = async (idToken: string) => {
-  const res = await apiClient<AuthResponse>("/auth/google", {
+export const resendCode = (email: string) =>
+  apiClient<{ message: string }>("/auth/resend-code", {
+    method: "POST",
+    body: { email },
+  });
+
+export const googleLogin = (idToken: string) =>
+  apiClient<AuthResponse>("/auth/google", {
     method: "POST",
     body: { idToken },
   });
-  localStorage.setItem("token", res.token);
-  return res;
-};

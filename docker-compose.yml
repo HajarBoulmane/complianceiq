@@ -5,38 +5,39 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: complianceiq
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing}
       POSTGRES_DB: complianceiq
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U complianceiq -d complianceiq"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
 
   chromadb:
     image: chromadb/chroma:1.5.3
     container_name: complianceiq-chroma
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
+   
 
   rag-service:
     build: ./rag-service
     container_name: complianceiq-rag
     restart: unless-stopped
-    ports:
-      - "4000:4000"
     environment:
       RAG_PORT: 4000
       CHROMA_URL: http://chromadb:8000
       GROQ_API_URL: https://api.groq.com/openai/v1/chat/completions
-      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY missing}
     depends_on:
       - chromadb
     volumes:
-      - ./rag-service/src:/app/src
-      - ./rag-service/data:/app/data
+      - ./rag-service/data:/app/data:ro
+  
 
   backend:
     build: ./backend
@@ -44,29 +45,33 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://complianceiq:${POSTGRES_PASSWORD}@postgres:5432/complianceiq
+      RAG_SERVICE_URL: http://rag-service:4000
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET missing}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+      FRONTEND_URL: http://localhost:5173
     depends_on:
-      - postgres
-      - rag-service
-    volumes:
-      - ./backend/src:/app/src
-      - ./backend/prisma:/app/prisma
+      postgres:
+        condition: service_healthy
+      rag-service:
+        condition: service_started
+    
 
-  frontend:                         # <-- 2 spaces, same as backend
-    build: ./frontend
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:3000/api
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
     container_name: complianceiq-frontend
     restart: unless-stopped
     ports:
-      - "5173:5173"
-    env_file:
-      - ./frontend/.env
-    environment:
-      VITE_API_URL: http://localhost:3000/api
+      - "5173:4173"
     depends_on:
       - backend
-    volumes:
-      - ./frontend/src:/app/src
+   
 
 volumes:
   postgres_data:

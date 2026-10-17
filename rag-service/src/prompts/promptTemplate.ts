@@ -6,7 +6,7 @@ export function buildRagPrompt(
   history?: { role: "user" | "assistant"; content: string }[]
 ): string {
   const context = chunks
-    .map((c, i) => `[Source ${i + 1} — ${c.sourceFile}]\n${c.text}`)
+    .map((c) => c.text)
     .join("\n\n");
 
   const conversationHistory = history?.length
@@ -25,5 +25,5 @@ ${context}
 QUESTION ACTUELLE :
 ${query}
 
-Réponds de manière claire et concise (3-5 phrases sauf si la question nécessite plus de détail). Cite les sources utilisées sous la forme "(Source 1)" à la fin des phrases concernées, pas au début.`;
+Réponds de manière claire, professionnelle et concise (3-5 phrases sauf si la question nécessite plus de détail), en phrases fluides. Utilise les extraits uniquement pour formuler ta réponse : ne mentionne jamais de source, de document, de nom de fichier ou de numéro d'extrait. N'ajoute aucune citation entre parenthèses ou entre crochets, aucune bibliographie et aucune section de sources. Tu peux nommer une loi ou un règlement (par exemple le RGPD ou la loi 09-08) si cela est utile à la réponse.`;
 }

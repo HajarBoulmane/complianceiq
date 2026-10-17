@@ -7,7 +7,6 @@ import {
   deleteConversation,
 } from "../api/compliance";
 import type {
-  AskResponse,
   Conversation,
   ConversationMessage,
 } from "../api/compliance";
@@ -17,7 +16,6 @@ import { useTheme } from "../context/themeContext";
 import {
   MessageSquareText,
   Send,
-  FileText,
   User,
   Sun,
   Moon,
@@ -40,7 +38,6 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources?: AskResponse["sources"];
   error?: boolean;
 };
 
@@ -78,7 +75,6 @@ export default function Ask() {
         id: msg.id,
         role: msg.role,
         content: msg.content,
-        sources: msg.sources,
       }));
       setMessages(chatMsgs);
     } catch (err) {
@@ -124,7 +120,6 @@ export default function Ask() {
         id: crypto.randomUUID(),
         role: "assistant",
         content: data.answer,
-        sources: data.sources,
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
@@ -319,47 +314,6 @@ export default function Ask() {
                     {msg.content}
                   </p>
 
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div
-                      className={`mt-3 pt-3 border-t space-y-2 ${
-                        msg.role === "user"
-                          ? "border-white/20"
-                          : "border-pink-200 dark:border-pink-500/20"
-                      }`}
-                    >
-                      <p
-                        className={`text-[11px] uppercase tracking-wider font-semibold ${
-                          msg.role === "user" ? "text-white/60" : "text-pink-500/70 dark:text-pink-400/70"
-                        }`}
-                      >
-                        Sources consultées
-                      </p>
-                      {msg.sources.map((source, i) => (
-                        <div
-                          key={i}
-                          className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                            msg.role === "user" ? "bg-white/10" : "bg-white dark:bg-white/5"
-                          }`}
-                        >
-                          <FileText size={14} className="shrink-0 text-pink-400" />
-                          <span
-                            className={`text-xs ${
-                              msg.role === "user" ? "text-white/90" : "text-slate-500 dark:text-slate-300"
-                            }`}
-                          >
-                            {source.sourceFile}
-                          </span>
-                          <span
-                            className={`text-xs ml-auto tabular-nums ${
-                              msg.role === "user" ? "text-white/50" : "text-slate-400"
-                            }`}
-                          >
-                            #{source.chunkIndex}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             ))}

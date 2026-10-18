@@ -56,17 +56,29 @@ export default function Register() {
         password,
       });
       navigate("/verify-email", { state: { email: email.trim() } });
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "";
-      
-      if (msg.includes("EMAIL_ALREADY_EXISTS") || msg.includes("409")) {
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : "Une erreur est survenue";
+      const normalizedMessage = message.toLowerCase();
+
+      if (
+        normalizedMessage.includes("email_already_exists") ||
+        normalizedMessage.includes("409")
+      ) {
         setError("Cet email est déjà utilisé. Essayez de vous connecter.");
-      } else if (msg.includes("password") || msg.includes("mot de passe")) {
+      } else if (
+        normalizedMessage.includes("password") ||
+        normalizedMessage.includes("mot de passe")
+      ) {
         setError("Le mot de passe ne respecte pas les critères requis.");
       } else {
         setError("Erreur lors de l'inscription. Veuillez réessayer.");
       }
-      
+
       console.error("Register error:", err);
     } finally {
       setLoading(false);

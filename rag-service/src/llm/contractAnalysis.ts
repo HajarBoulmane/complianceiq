@@ -4,6 +4,7 @@ import {
   ContractAnalysisSchema,
   type ContractAnalysisValidated,
 } from "./contractAnalysisSchema";
+import { stripInlineCitations } from "../utils/textUtils";
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
@@ -128,54 +129,72 @@ const EXPECTED_CLAUSES_BY_TYPE: Record<ContractType, string[]> = {
   autre: [],
 };
 
-const MAX_CONTEXT_CHARS = 12000;
-const MAX_CONTRACT_CHARS = 20000;
+// ── Budget de tokens ────────────────────────────────────────────
+// Groq (offre gratuite) limite les tokens d'entrée par minute (ex: 7 000).
+// Mesuré sur ce prompt : ~4 caractères par token. On compte 3,6 pour garder ~10 % de marge.
+const CHARS_PER_TOKEN = 3.6;
+const MAX_PROMPT_TOKENS = 6100; // sous la limite de 7 000
+const MAX_PROMPT_CHARS = Math.floor(MAX_PROMPT_TOKENS * CHARS_PER_TOKEN);
+const MIN_CONTEXT_CHARS = 2500; // contexte légal minimal à conserver
+const MAX_CONTRACT_CHARS = 20000; // plafond absolu pour le texte du contrat
+const CHUNKS_PER_CATEGORY = 2;
+const MAX_CHUNK_CHARS = 900;
+const ANALYSIS_MAX_OUTPUT_TOKENS = 3500;
 
-async function buildLegalContext(): Promise<{
+async function buildLegalContext(maxChars: number): Promise<{
   context: string;
   validSources: Set<string>;
 }> {
   const results = await Promise.all(
     Object.entries(CATEGORY_CHECKLISTS).map(async ([categorie, { query }]) => {
       try {
-        return await retrieveRelevantChunks(query, 3);
+        return await retrieveRelevantChunks(query, CHUNKS_PER_CATEGORY);
       } catch (err) {
         console.warn(
           `[buildLegalContext] Retrieval échoué pour la catégorie "${categorie}":`,
           err
         );
-        return [];
+        return [] as RetrievedChunk[];
       }
     })
   );
 
-  const allChunks: RetrievedChunk[] = [];
+  // Round-robin : chaque catégorie garde son meilleur extrait si le budget est serré
+  const ordered: RetrievedChunk[] = [];
   const seen = new Set<string>();
-  for (const chunks of results) {
-    for (const chunk of chunks) {
+  const maxRank = Math.max(0, ...results.map((r) => r.length));
+  for (let rank = 0; rank < maxRank; rank++) {
+    for (const chunks of results) {
+      const chunk = chunks[rank];
+      if (!chunk) continue;
       const key = `${chunk.sourceFile}-${chunk.chunkIndex}`;
       if (!seen.has(key)) {
         seen.add(key);
-        allChunks.push(chunk);
+        ordered.push(chunk);
       }
     }
   }
 
-  const validSources = new Set(allChunks.map((c) => c.sourceFile));
+  const parts: string[] = [];
+  const used: RetrievedChunk[] = [];
+  let total = 0;
+  for (const c of ordered) {
+    const text =
+      c.text.length > MAX_CHUNK_CHARS ? c.text.slice(0, MAX_CHUNK_CHARS) + "…" : c.text;
+    const part = `[Extrait ${parts.length + 1} — ${c.sourceFile}]\n${text}`;
+    if (total + part.length > maxChars) break;
+    parts.push(part);
+    used.push(c);
+    total += part.length + 2;
+  }
 
-  if (allChunks.length === 0) {
+  const validSources = new Set(used.map((c) => c.sourceFile));
+
+  if (parts.length === 0) {
     return { context: "(aucun contexte légal disponible)", validSources };
   }
 
-  let context = allChunks
-    .map((c, i) => `[Source ${i + 1} — ${c.sourceFile}]\n${c.text}`)
-    .join("\n\n");
-
-  if (context.length > MAX_CONTEXT_CHARS) {
-    context = context.slice(0, MAX_CONTEXT_CHARS) + "\n\n[...contexte tronqué...]";
-  }
-
-  return { context, validSources };
+  return { context: parts.join("\n\n"), validSources };
 }
 
 const CHECKLIST_BLOCK = Object.entries(CATEGORY_CHECKLISTS)
@@ -216,7 +235,7 @@ ${EXPECTED_CLAUSES_BLOCK}
 
 Étape 3 : pour chaque risque identifié dans "risques", si tu peux formuler une clause de remplacement conforme, ajoute-la dans "clause_suggeree" — une clause réelle, prête à insérer dans le contrat, cohérente avec le CONTEXTE LÉGAL ci-dessus. Ne force jamais une suggestion si tu n'es pas sûr qu'elle soit juridiquement correcte : dans ce cas, omets simplement le champ.
 
-Étape 4 : extrais dans "obligations" les échéances importantes du contrat (renouvellement/reconduction tacite, préavis, paiements récurrents ou dus à une date précise). N'inclus "date_echeance" QUE si une date concrète ou calculable (ex: "3 mois après signature" avec une date de signature indiquée) apparaît explicitement dans le texte — n'invente JAMAIS une date. Si aucune date n'est déterminable, inclus quand même l'obligation mais sans "date_echeance".
+Étape 4 : extrais dans "obligations" les échéances importantes du contrat (renouvellement/reconduction tacite, préavis, paiements récurrents ou dus à une date précise). N'inclus "date_echeance" QUE si une date concrète ou calculable (ex: "3 mois après signature" avec une date de signature indiquée) apparaît explicitement dans le texte. Si aucune date n'est déterminable, inclus quand même l'obligation mais sans "date_echeance".
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après, sans balises markdown (pas de \`\`\`json), respectant EXACTEMENT ce schéma :
 
@@ -239,7 +258,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après,
       "severite": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
       "categorie": "liability" | "termination" | "ip_confidentiality" | "dispute_resolution" | "payment_terms" | "rgpd_compliance",
       "description": "<explication concise du problème>",
-      "reference_legale": "<UNIQUEMENT si le CONTEXTE LÉGAL ci-dessus contient une source pertinente à ce risque précis — cite alors le nom exact de la source (ex: 'code-travail.pdf'). Si aucune source du contexte ne s'applique, OMETS ce champ entièrement — n'invente jamais de référence>",
+      "reference_legale": "<UNIQUEMENT si le CONTEXTE LÉGAL ci-dessus contient une source pertinente à ce risque précis — cite alors le nom exact du fichier (ex: 'code-travail.pdf'). Sinon OMETS ce champ>",
       "clause_suggeree": "<OPTIONNEL — clause de remplacement conforme, voir Étape 3>"
     }
   ],
@@ -260,16 +279,11 @@ Barème de sévérité (applique-le strictement) :
 - LOW : amélioration recommandée mais non bloquante (bonne pratique, clarté rédactionnelle)
 
 Règles :
-- Le type_contrat détecté doit influencer quelles clauses_manquantes et quels risques tu cherches (ex : ne signale pas l'absence de clause de préavis de licenciement pour un NDA)
-- score_global et les scores par catégorie doivent refléter honnêtement la gravité (une catégorie avec un risque CRITICAL ne peut pas avoir un score > 40)
-- nb_problemes = nombre réel de risques trouvés dans cette catégorie précise
-- Si aucun problème dans une catégorie, score = 100 et nb_problemes = 0
-- Chaque risque doit être concret et référencé au texte du contrat, jamais générique
-- Classe chaque risque dans UNE SEULE catégorie (celle la plus pertinente)
-- reference_legale ne doit JAMAIS être inventée : uniquement si une source du CONTEXTE LÉGAL s'applique directement
-- clause_suggeree ne doit JAMAIS être inventée sans base légale solide : mieux vaut l'omettre que de suggérer une clause incorrecte
-- Dans clause_suggeree, ne propose JAMAIS un montant chiffré précis (MAD, %, jours) qui n'apparaît ni dans le contrat original ni dans le CONTEXTE LÉGAL — si tu n'as aucune base pour un chiffre concret, utilise une formulation qualitative (ex: "plafond de responsabilité raisonnable au regard de la valeur du contrat") plutôt qu'un nombre inventé
-- date_echeance ne doit JAMAIS être inventée : mieux vaut omettre le champ que de deviner une date
+- Le type_contrat détecté détermine les clauses_manquantes et les risques à chercher (ex : pas de préavis de licenciement pour un NDA)
+- Les scores reflètent la gravité réelle (une catégorie avec un risque CRITICAL ne dépasse pas 40) ; sans problème : score 100 et nb_problemes 0 ; nb_problemes = nombre réel de risques de la catégorie
+- Chaque risque est concret, référencé au texte du contrat (jamais générique) et classé dans UNE SEULE catégorie
+- N'invente JAMAIS : reference_legale (uniquement une source du CONTEXTE LÉGAL qui s'applique directement), clause_suggeree sans base légale solide (omets-la plutôt), chiffres précis (MAD, %, jours) absents du contrat et du contexte (utilise une formulation qualitative), ni date_echeance
+- N'écris jamais "Source N" ou "Extrait N" dans les descriptions ou clauses suggérées ; cite uniquement le nom du fichier dans reference_legale
 
 CONTRAT :
 ${contractText}
@@ -289,6 +303,10 @@ function normalizeContractAnalysisPayload(value: unknown): unknown {
 
   const payload = value as Record<string, any>;
 
+  if (typeof payload.resume === "string") {
+    payload.resume = stripInlineCitations(payload.resume.trim());
+  }
+
   if (Array.isArray(payload.risques)) {
     payload.risques = payload.risques.map((risk: any) => {
       const normalizedRisk = { ...risk };
@@ -297,14 +315,14 @@ function normalizeContractAnalysisPayload(value: unknown): unknown {
         normalizedRisk.clause = normalizedRisk.clause.trim();
       }
       if (typeof normalizedRisk.description === "string") {
-        normalizedRisk.description = normalizedRisk.description.trim();
+        normalizedRisk.description = stripInlineCitations(normalizedRisk.description.trim());
       }
       if (typeof normalizedRisk.reference_legale === "string") {
         normalizedRisk.reference_legale = normalizedRisk.reference_legale.trim();
         if (!normalizedRisk.reference_legale) delete normalizedRisk.reference_legale;
       }
       if (typeof normalizedRisk.clause_suggeree === "string") {
-        normalizedRisk.clause_suggeree = normalizedRisk.clause_suggeree.trim();
+        normalizedRisk.clause_suggeree = stripInlineCitations(normalizedRisk.clause_suggeree.trim());
         if (!normalizedRisk.clause_suggeree) delete normalizedRisk.clause_suggeree;
       }
 
@@ -317,7 +335,7 @@ function normalizeContractAnalysisPayload(value: unknown): unknown {
       const normalizedObligation = { ...obligation };
 
       if (typeof normalizedObligation.description === "string") {
-        normalizedObligation.description = normalizedObligation.description.trim();
+        normalizedObligation.description = stripInlineCitations(normalizedObligation.description.trim());
       }
       if (typeof normalizedObligation.date_echeance === "string") {
         const date = normalizedObligation.date_echeance.trim();
@@ -420,7 +438,8 @@ async function callAndValidate(
   | { ok: false; rawResponse: string; error: string }
 > {
   const rawResponse = await askLLM(
-    ANALYSIS_PROMPT_TEMPLATE(contractText, legalContext)
+    ANALYSIS_PROMPT_TEMPLATE(contractText, legalContext),
+    { jsonMode: true, maxTokens: ANALYSIS_MAX_OUTPUT_TOKENS }
   );
   const cleaned = cleanLlmJson(rawResponse);
 
@@ -482,15 +501,27 @@ function buildFallbackAnalysis(contractText: string): ContractAnalysisResult {
 export async function analyzeContract(
   contractText: string
 ): Promise<ContractAnalysisResult> {
+  // Budget de tokens : partie fixe du prompt, puis répartition contrat / contexte légal
+  const fixedLen = ANALYSIS_PROMPT_TEMPLATE("", "").length;
+  const available = Math.max(MAX_PROMPT_CHARS - fixedLen, MIN_CONTEXT_CHARS + 3000);
+  const contractBudget = Math.min(MAX_CONTRACT_CHARS, available - MIN_CONTEXT_CHARS);
+
   let boundedContractText = contractText;
-  if (contractText.length > MAX_CONTRACT_CHARS) {
+  if (contractText.length > contractBudget) {
     console.warn(
-      `[analyzeContract] contrat tronqué de ${contractText.length} à ${MAX_CONTRACT_CHARS} caractères`
+      `[analyzeContract] contrat tronqué de ${contractText.length} à ${contractBudget} caractères (limite de tokens)`
     );
-    boundedContractText = contractText.slice(0, MAX_CONTRACT_CHARS);
+    boundedContractText = contractText.slice(0, contractBudget);
   }
 
-  const { context: legalContext, validSources } = await buildLegalContext();
+  const contextBudget = available - boundedContractText.length;
+  const { context: legalContext, validSources } = await buildLegalContext(contextBudget);
+
+  console.log(
+    `[analyzeContract] prompt ≈ ${Math.round(
+      (fixedLen + boundedContractText.length + legalContext.length) / CHARS_PER_TOKEN
+    )} tokens (contrat: ${boundedContractText.length} car., contexte: ${legalContext.length} car.)`
+  );
 
   let attempt = await callAndValidate(boundedContractText, legalContext, validSources);
 

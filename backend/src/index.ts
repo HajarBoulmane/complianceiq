@@ -1,43 +1,56 @@
-  import express , { Request, Response } from "express";
-  import cors from "cors";
-  import helmet from "helmet";
-  import  morgan from "morgan";
-  import dotenv from "dotenv";
-  import authRoutes from "./routes/auth.routes";
-  import complianceRoutes from "./routes/compliance.route";
-  import cookieParser from "cookie-parser";
+import "dotenv/config"; // TOUJOURS en premier
+import express, { Request, Response, NextFunction } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import authRoutes from "./routes/auth.routes";
+import complianceRoutes from "./routes/compliance.route";
 
+const app = express();
+const PORT = process.env.PORT || 3000;
+const isProd = process.env.NODE_ENV === "production";
 
-  dotenv.config();
-
-  const app = express();
-
+// Seulement si un reverse proxy (Caddy/Nginx) est devant l'API
+if (process.env.TRUST_PROXY === "true") {
   app.set("trust proxy", 1);
-  
-  const PORT = process.env.PORT || 3000;
+}
 
-
- app.use(cors({
+app.use(helmet());
+app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:5173",
   credentials: true,
 }));
-  app.use(cookieParser());
-  app.use(helmet());
-  app.use(morgan("dev"));
-  app.use(express.json());
+app.use(morgan(isProd ? "combined" : "dev"));
+app.use(cookieParser());
 
-  app.use("/api/auth", authRoutes);
-  app.use("/api/compliance", complianceRoutes);
+app.use("/api/auth", express.json({ limit: "10kb" }), authRoutes);
+app.use("/api/compliance", express.json({ limit: "2mb" }), complianceRoutes);
 
-
-  app.get("/health", (req: Request, res: Response) => {
-    res.status(200).json({ 
-      status: "ok",
-      server: "complianceiq-backend",
-      timestamp: new Date().toISOString()
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: "ok",
+    server: "complianceiq-backend",
+    timestamp: new Date().toISOString(),
   });
-  });
+});
 
-  app.listen(process.env.PORT || 3000, () => {
-    console.log(`Server is running on port ${process.env.PORT || 3000}`);
-  });
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Gestionnaire d'erreurs global (4 arguments obligatoires pour qu'Express le reconnaisse)
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Payload too large" });
+  }
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON" });
+  }
+  console.error(err);
+  return res.status(500).json({ error: "Internal server error" });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

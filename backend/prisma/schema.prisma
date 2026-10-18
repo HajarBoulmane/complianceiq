@@ -12,6 +12,7 @@ datasource db {
   provider = "postgresql"
 }
 
+
 model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
@@ -23,6 +24,8 @@ model User {
   isVerified             Boolean   @default(false)
   verificationCode       String?
   verificationCodeExpiry DateTime?
+  verificationAttempts Int @default(0)
+
 
   documents     Document[]
   conversations Conversation[]

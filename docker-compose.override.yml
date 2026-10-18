@@ -1,0 +1,18 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  chromadb:
+    ports:
+      - "127.0.0.1:8000:8000"
+  rag-service:
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./rag-service/src:/app/src
+  backend:
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    extra_hosts:
+      - "www.googleapis.com:192.178.25.110"

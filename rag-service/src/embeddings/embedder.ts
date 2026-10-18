@@ -2,8 +2,12 @@ let embedder: any = null;
 
 async function getEmbedder() {
   if (!embedder) {
-    const { pipeline } = await import("@xenova/transformers");
-    embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    const { pipeline } = await import("@huggingface/transformers");
+    embedder = await pipeline(
+      "feature-extraction",
+      "Xenova/all-MiniLM-L6-v2",
+      { dtype: "q8" } // garde le comportement quantifié de l'ancienne version
+    );
   }
   return embedder;
 }

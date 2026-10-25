@@ -25,8 +25,8 @@ export default function Parametres() {
         {/* Apparence */}
         <div className="bg-white dark:bg-[#1A1420] rounded-2xl p-4 md:p-6 shadow-sm mb-4">
           <p className="text-slate-400 text-xs uppercase tracking-wide mb-4">Apparence</p>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-slate-50 dark:bg-white/5 flex items-center justify-center">
                 {theme === "dark" ? (
                   <Moon size={16} className="text-violet-400" />
@@ -34,7 +34,7 @@ export default function Parametres() {
                   <Sun size={16} className="text-orange-400" />
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-slate-700 dark:text-slate-200 text-sm font-medium">Thème</p>
                 <p className="text-slate-400 text-xs">
                   {theme === "dark" ? "Mode sombre activé" : "Mode clair activé"}
@@ -42,14 +42,18 @@ export default function Parametres() {
               </div>
             </div>
             <button
+              type="button"
+              role="switch"
+              aria-checked={theme === "dark"}
+              aria-label={`Activer le mode ${theme === "dark" ? "clair" : "sombre"}`}
               onClick={toggleTheme}
-              className={`relative w-12 h-6.5 h-6 rounded-full transition shrink-0 ${
+              className={`relative h-6 w-12 shrink-0 overflow-hidden rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400 ${
                 theme === "dark" ? "bg-violet-500" : "bg-slate-300"
               }`}
             >
               <span
-                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  theme === "dark" ? "translate-x-6" : "translate-x-0.5"
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  theme === "dark" ? "translate-x-6" : ""
                 }`}
               />
             </button>

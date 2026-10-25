@@ -12,28 +12,34 @@ const MAX_ATTEMPTS = 5;
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const generateCode = () => randomInt(100000, 1000000).toString();
 
-async function sendCodeSafely(email: string, code: string) {
-  try {
-    await sendVerificationEmail(email, code);
-  } catch (err) {
-    console.error("Failed to send verification email:", err);
-  }
-}
-
 export async function registerUser(rawEmail: string, password: string, fullName?: string) {
   const email = normalizeEmail(rawEmail);
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error("EMAIL_ALREADY_EXISTS");
+  if (existing && (existing.passwordHash || !existing.googleId)) {
+    throw new Error("EMAIL_ALREADY_EXISTS");
+  }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const verificationCode = generateCode();
   const verificationCodeExpiry = new Date(Date.now() + CODE_TTL_MS);
 
-  const user = await prisma.user.create({
-    data: { email, passwordHash, fullName, verificationCode, verificationCodeExpiry },
-  });
+  const user = existing
+    ? await prisma.user.update({
+        where: { email },
+        data: {
+          passwordHash,
+          fullName: fullName ?? existing.fullName,
+          isVerified: false,
+          verificationCode,
+          verificationCodeExpiry,
+          verificationAttempts: 0,
+        },
+      })
+    : await prisma.user.create({
+        data: { email, passwordHash, fullName, verificationCode, verificationCodeExpiry },
+      });
 
-  await sendCodeSafely(email, verificationCode);
+  await sendVerificationEmail(email, verificationCode);
   return { user }; // pas de token : il est émis après vérification
 }
 
@@ -104,7 +110,7 @@ export async function resendVerificationCode(rawEmail: string) {
       verificationAttempts: 0,
     },
   });
-  await sendCodeSafely(email, code);
+  await sendVerificationEmail(email, code);
 }
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -121,23 +127,14 @@ export async function loginWithGoogle(idToken: string) {
   const email = normalizeEmail(payload.email);
 
   let user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.passwordHash) throw new Error("EMAIL_NOT_REGISTERED");
+  if (!user.isVerified) throw new Error("EMAIL_NOT_VERIFIED");
 
-  if (!user) {
-    user = await prisma.user.create({
-      data: { email, fullName: payload.name, googleId: payload.sub, isVerified: true },
-    });
-  } else if (!user.googleId) {
-    // Lier un compte existant. S'il n'était pas vérifié, le mot de passe
-    // a pu être posé par un tiers : on le supprime.
+  if (!user.googleId) {
     user = await prisma.user.update({
       where: { email },
       data: {
         googleId: payload.sub,
-        isVerified: true,
-        verificationCode: null,
-        verificationCodeExpiry: null,
-        verificationAttempts: 0,
-        ...(user.isVerified ? {} : { passwordHash: null }),
       },
     });
   } else if (user.googleId !== payload.sub) {

@@ -46,6 +46,15 @@ const handleGoogleSuccess = async (credentialResponse: unknown) => {
     setUser(data.user);
     navigate("/dashboard");
   } catch (err) {
+    const authError = err as { status?: number; data?: { code?: string } };
+    if (authError.data?.code === "EMAIL_NOT_VERIFIED") {
+      setError("Votre compte n'est pas vérifié. Connectez-vous avec votre email et mot de passe pour vérifier votre adresse.");
+      return;
+    }
+    if (authError.data?.code === "EMAIL_NOT_REGISTERED") {
+      setError("Aucun compte n'est associé à cette adresse Google. Créez un compte avant de vous connecter.");
+      return;
+    }
     setError("Erreur lors de la connexion Google");
     console.error("Erreur Google login:", err);
   }

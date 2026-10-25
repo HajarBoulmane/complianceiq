@@ -7,11 +7,12 @@ export default function VerifyEmail() {
   const location = useLocation();
   const navigate = useNavigate();
   const { setUser } = useAuth();
-  const email = (location.state as { email?: string } | null)?.email;
+  const verificationState = location.state as { email?: string; info?: string } | null;
+  const email = verificationState?.email;
 
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(verificationState?.info ?? null);
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
@@ -46,8 +47,15 @@ export default function VerifyEmail() {
       await resendCode(email);
       setInfo("Si le compte existe, un nouveau code a été envoyé.");
       setCooldown(30);
-    } catch {
-      setError("Trop de tentatives, réessayez plus tard.");
+    } catch (err) {
+      const requestError = err as { status?: number; data?: { code?: string } };
+      setError(
+        requestError.data?.code === "VERIFICATION_EMAIL_FAILED"
+          ? "Le code n'a pas pu être envoyé. Vérifiez la configuration email du serveur."
+          : requestError.status === 429
+            ? "Trop de tentatives, réessayez plus tard."
+            : "Impossible de renvoyer le code. Réessayez plus tard."
+      );
     }
   };
 

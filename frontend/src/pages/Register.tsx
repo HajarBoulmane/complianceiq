@@ -57,6 +57,16 @@ export default function Register() {
       });
       navigate("/verify-email", { state: { email: email.trim() } });
     } catch (err) {
+      const requestError = err as { status?: number; data?: { code?: string } };
+      if (requestError.data?.code === "VERIFICATION_EMAIL_FAILED") {
+        navigate("/verify-email", {
+          state: {
+            email: email.trim(),
+            info: "Votre compte est créé, mais le code n'a pas pu être envoyé. Configurez l'envoi d'emails puis demandez un nouveau code.",
+          },
+        });
+        return;
+      }
       const message =
         err instanceof Error
           ? err.message

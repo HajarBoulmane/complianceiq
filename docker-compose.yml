@@ -50,6 +50,7 @@ services:
       RAG_SERVICE_URL: http://rag-service:4000
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET missing}
       RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
       GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
       FRONTEND_URL: http://localhost:5173
     depends_on:

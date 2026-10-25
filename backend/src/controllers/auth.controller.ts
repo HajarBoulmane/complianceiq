@@ -34,6 +34,12 @@ export async function register(req: Request, res: Response) {
     return res.status(201).json({ message: "Verification code sent", email });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
+    if (message === "VERIFICATION_EMAIL_FAILED") {
+      return res.status(503).json({
+        error: "Account created, but the verification email could not be sent",
+        code: "VERIFICATION_EMAIL_FAILED",
+      });
+    }
     if (message === "EMAIL_ALREADY_EXISTS") {
       return res.status(409).json({ error: "Email already in use" });
     }
@@ -87,6 +93,12 @@ export async function resendCodeHandler(req: Request, res: Response) {
   try {
     await resendVerificationCode(parsed.data.email);
   } catch (err) {
+    if (getErrorMessage(err) === "VERIFICATION_EMAIL_FAILED") {
+      return res.status(503).json({
+        error: "Verification email could not be sent",
+        code: "VERIFICATION_EMAIL_FAILED",
+      });
+    }
     console.error("resend failed:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -101,6 +113,19 @@ export async function googleAuthHandler(req: Request, res: Response) {
     setAuthCookie(res, token);
     return res.json({ user: publicUser(user) });
   } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    if (message === "EMAIL_NOT_REGISTERED") {
+      return res.status(403).json({
+        error: "No account is registered with this Google email",
+        code: "EMAIL_NOT_REGISTERED",
+      });
+    }
+    if (message === "EMAIL_NOT_VERIFIED") {
+      return res.status(403).json({
+        error: "Email not verified",
+        code: "EMAIL_NOT_VERIFIED",
+      });
+    }
     console.error("Google authentication failed:", error);
     return res.status(401).json({ error: "Invalid Google authentication" });
   }

@@ -22,110 +22,128 @@ export default function Login() {
       const data = await loginUser({ email, password });
       setUser(data.user);
       navigate("/dashboard");
-    } catch (error) {
-      setError("Email ou mot de passe incorrect");
-      console.error("Erreur lors de la connexion:", error);
+    } catch (err) {
+      const e2 = err as { status?: number; data?: { code?: string } };
+      if (e2.status === 403 && e2.data?.code === "EMAIL_NOT_VERIFIED") {
+        navigate("/verify-email", { state: { email } });
+        return;
+      }
+      setError(
+        e2.status === 429
+          ? "Trop de tentatives, réessayez plus tard"
+          : "Email ou mot de passe incorrect"
+      );
+      console.error("Erreur lors de la connexion:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse: unknown) => {
-    setError(null);
-    try {
-      const data = await googleLogin((credentialResponse as { credential: string }).credential);
-      setUser(data.user);
-      navigate("/dashboard");
-    } catch (err) {
-      setError("Erreur lors de la connexion Google");
-      console.error("Erreur Google login:", err);
+const handleGoogleSuccess = async (credentialResponse: unknown) => {
+  setError(null);
+  try {
+    const data = await googleLogin((credentialResponse as { credential: string }).credential);
+    setUser(data.user);
+    navigate("/dashboard");
+  } catch (err) {
+    const authError = err as { status?: number; data?: { code?: string } };
+    if (authError.data?.code === "EMAIL_NOT_VERIFIED") {
+      setError("Votre compte n'est pas vérifié. Connectez-vous avec votre email et mot de passe pour vérifier votre adresse.");
+      return;
     }
-  };
+    if (authError.data?.code === "EMAIL_NOT_REGISTERED") {
+      setError("Aucun compte n'est associé à cette adresse Google. Créez un compte avant de vous connecter.");
+      return;
+    }
+    setError("Erreur lors de la connexion Google");
+    console.error("Erreur Google login:", err);
+  }
+};
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0B1120] px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="font-heading text-3xl font-bold text-white">
-            Compliance<span className="bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent">IQ</span>
-          </h1>
-          <p className="text-slate-400 mt-2 text-sm">
-            Connectez-vous à votre espace conformité
-          </p>
+return (
+  <div className="min-h-screen flex items-center justify-center bg-[#0B1120] px-4">
+    <div className="w-full max-w-md">
+      <div className="text-center mb-8">
+        <h1 className="font-heading text-3xl font-bold text-white">
+          Compliance<span className="bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent">IQ</span>
+        </h1>
+        <p className="text-slate-400 mt-2 text-sm">
+          Connectez-vous à votre espace conformité
+        </p>
+      </div>
+
+      <div className="bg-[#141B2E] border border-white/10 rounded-xl p-8 shadow-xl">
+        <div className="mb-5 flex justify-center">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError("Échec de la connexion Google")}
+          />
         </div>
 
-        <div className="bg-[#141B2E] border border-white/10 rounded-xl p-8 shadow-xl">
-          <div className="mb-5 flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError("Échec de la connexion Google")}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex-1 h-px bg-white/10" />
+          <span className="text-xs text-slate-500">OU</span>
+          <div className="flex-1 h-px bg-white/10" />
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-5">
+            <label className="block text-sm text-slate-300 mb-1.5">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="vous@entreprise.com"
+              required
+              className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
             />
           </div>
 
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-xs text-slate-500">OU</span>
-            <div className="flex-1 h-px bg-white/10" />
+          <div className="mb-5">
+            <label className="block text-sm text-slate-300 mb-1.5">Mot de passe</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 pr-11 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="mb-5">
-              <label className="block text-sm text-slate-300 mb-1.5">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="vous@entreprise.com"
-                required
-                className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
-              />
-            </div>
+          {error && (
+            <p className="text-red-400 text-sm mb-4 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
 
-            <div className="mb-5">
-              <label className="block text-sm text-slate-300 mb-1.5">Mot de passe</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full bg-[#0D1410] border border-white/10 rounded-lg px-4 py-2.5 pr-11 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
+          >
+            {loading ? "Connexion..." : "Se connecter"}
+          </button>
+        </form>
 
-            {error && (
-              <p className="text-red-400 text-sm mb-4 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
-            >
-              {loading ? "Connexion..." : "Se connecter"}
-            </button>
-          </form>
-
-          <p className="text-center text-sm text-slate-400 mt-5">
-            Pas encore de compte ?{" "}
-            <a href="/register" className="text-pink-400 hover:underline">
-              Créer un compte
-            </a>
-          </p>
-        </div>
+        <p className="text-center text-sm text-slate-400 mt-5">
+          Pas encore de compte ?{" "}
+          <a href="/register" className="text-pink-400 hover:underline">
+            Créer un compte
+          </a>
+        </p>
       </div>
     </div>
-  );
+  </div>
+);
 }

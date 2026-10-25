@@ -1,10 +1,11 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const from = process.env.RESEND_FROM_EMAIL ?? "ComplianceIQ <onboarding@resend.dev>";
 
 export async function sendVerificationEmail(to: string, code: string) {
-  await resend.emails.send({
-    from: "ComplianceIQ <onboarding@resend.dev>", // domaine de test Resend, marche direct sans config DNS
+  const { error } = await resend.emails.send({
+    from,
     to,
     subject: "Vérifie ton compte ComplianceIQ",
     html: `
@@ -18,4 +19,9 @@ export async function sendVerificationEmail(to: string, code: string) {
       </div>
     `,
   });
+
+  if (error) {
+    console.error("Resend rejected verification email:", error);
+    throw new Error("VERIFICATION_EMAIL_FAILED");
+  }
 }

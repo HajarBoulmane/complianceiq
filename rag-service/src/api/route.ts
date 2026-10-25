@@ -3,6 +3,7 @@ import { retrieveRelevantChunks } from "../retrieval/retriever";
 import { buildRagPrompt } from "../prompts/promptTemplate";
 import { askLLM } from "../llm/llmClient";
 import { analyzeContract } from "../llm/contractAnalysis";
+import { stripInlineCitations } from "../utils/textUtils";
 
 
 const router = Router();
@@ -21,7 +22,7 @@ router.post("/query", async (req: Request, res: Response) => {
 
     return res.status(200).json({
       question,
-      answer,
+      answer: stripInlineCitations(answer),
       sources: chunks.map((c) => ({
         sourceFile: c.sourceFile,
         chunkIndex: c.chunkIndex,

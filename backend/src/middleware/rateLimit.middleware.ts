@@ -1,10 +1,12 @@
 import rateLimit from "express-rate-limit";
 import type { Request, Response } from "express";
+import { rateLimitHitTotal } from "../metrics";
 
 const logAndBlock =
-  (message: { error: string }) =>
+  (limiter: string, message: { error: string }) =>
   (req: Request, res: Response, _next: unknown, options: { statusCode: number }) => {
-    console.warn("[security] rate_limit_hit", { path: req.path, ip: req.ip });
+    rateLimitHitTotal.inc({ limiter });
+    console.warn("[security] rate_limit_hit", { limiter, path: req.path, ip: req.ip });
     res.status(options.statusCode).json(message);
   };
 
@@ -32,7 +34,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: tooManyAttempts,
-  handler: logAndBlock(tooManyAttempts),
+  handler: logAndBlock("auth", tooManyAttempts),
 });
 
 export const codeLimiter = rateLimit({
@@ -41,5 +43,5 @@ export const codeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: tooManyAttempts,
-  handler: logAndBlock(tooManyAttempts),
+  handler: logAndBlock("code", tooManyAttempts),
 });

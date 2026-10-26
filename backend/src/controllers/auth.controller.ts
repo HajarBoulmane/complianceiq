@@ -6,6 +6,7 @@ import {
 } from "../services/auth.service";
 import { setAuthCookie, clearAuthCookie } from "../utils/cookies";
 import prisma from "../prisma";
+import { loginFailedTotal, verifyCodeFailedTotal } from "../metrics";
 
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
 const registerSchema = z.object({
@@ -63,7 +64,8 @@ export async function login(req: Request, res: Response) {
     if (message === "GOOGLE_ACCOUNT_USE_OAUTH") {
       return res.status(400).json({ error: "Use Google sign-in for this account" });
     }
-    if (message === "INVALID_CREDENTIALS") {
+        if (message === "INVALID_CREDENTIALS") {
+      loginFailedTotal.inc();
       console.warn("[security] login_failed", { ip: req.ip });
       return res.status(401).json({ error: "Invalid email or password" });
     }
@@ -84,6 +86,7 @@ export async function verifyEmailHandler(req: Request, res: Response) {
       console.error("Email verification failed:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
+        verifyCodeFailedTotal.inc();
     console.warn("[security] verify_code_failed", { ip: req.ip });
     return res.status(400).json({ error: "Invalid or expired code" });
   }

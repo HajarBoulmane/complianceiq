@@ -31,7 +31,7 @@ router.post("/query", async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error("Erreur /query:", err);
-    return res.status(500).json({ error: "Erreur interne du serveur", details: err.message });
+    return res.status(500).json({ error: "Erreur interne du serveur" });
   }
 });
 
@@ -48,7 +48,7 @@ router.post("/analyze-contract", async (req: Request, res: Response) => {
     return res.status(200).json({ analysis });
   } catch (err: any) {
     console.error("Erreur /analyze-contract:", err);
-    return res.status(500).json({ error: "Erreur interne du serveur", details: err.message });
+    return res.status(500).json({ error: "Erreur interne du serveur" });
   } 
 });
 

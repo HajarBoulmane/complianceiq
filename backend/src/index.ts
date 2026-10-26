@@ -6,6 +6,8 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes";
 import complianceRoutes from "./routes/compliance.route";
+import { metricsMiddleware, register as metricsRegister } from "./metrics";
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +25,7 @@ app.use(cors({
 }));
 app.use(morgan(isProd ? "combined" : "dev"));
 app.use(cookieParser());
+app.use(metricsMiddleware);
 
 app.use("/api/auth", express.json({ limit: "10kb" }), authRoutes);
 app.use("/api/compliance", express.json({ limit: "2mb" }), complianceRoutes);
@@ -33,6 +36,11 @@ app.get("/health", (_req: Request, res: Response) => {
     server: "complianceiq-backend",
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get("/metrics", async (_req, res) => {
+  res.set("Content-Type", metricsRegister.contentType);
+  res.end(await metricsRegister.metrics());
 });
 
 app.use((_req: Request, res: Response) => {

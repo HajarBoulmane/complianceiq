@@ -12,46 +12,57 @@ import {
   getNotifications,
   markNotificationRead,
 } from "../services/compliance.service";
+import { z } from "zod";
 
 // En dev, on garde les détails dans les logs serveur uniquement.
 // En prod, l'utilisateur ne reçoit jamais err.message (stack trace, requête SQL, etc).
+
 function handleServerError(res: Response, route: string, err: any) {
   console.error(`Erreur ${route}:`, err);
   return res.status(500).json({ error: "Erreur interne du serveur" });
 }
 
+const askSchema = z.object({
+  question: z.string().trim().min(1).max(2000),
+  topK: z.number().int().min(1).max(10).nullish(),
+  conversationId: z.number().int().positive().nullish(),
+});
+
+const analyzeSchema = z.object({
+  contractText: z.string().trim().min(1).max(200_000),
+  filename: z.string().trim().max(255).nullish(),
+});
+
 export async function askQuestion(req: Request, res: Response) {
   try {
-    const { question, topK, conversationId } = req.body;
     const userId = req.user?.userId;
-
     if (!userId) return res.status(401).json({ error: "Non authentifié" });
-    if (!question || typeof question !== "string") {
-      return res.status(400).json({ error: "Le champ 'question' est requis (string)" });
-    }
 
-    const result = await askAndSave(userId, question, conversationId, topK);
+    const parsed = askSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Données invalides" });
+    const { question, topK, conversationId } = parsed.data;
+
+    const result = await askAndSave(userId, question, conversationId ?? undefined, topK ?? undefined);
     return res.status(200).json(result);
   } catch (err: any) {
     return handleServerError(res, "/compliance/ask", err);
   }
 }
-
 export async function analyzeContract(req: Request, res: Response) {
   try {
-    const { contractText, filename } = req.body;
     const userId = req.user?.userId;
-
     if (!userId) return res.status(401).json({ error: "Non authentifié" });
-    if (!contractText) return res.status(400).json({ error: "contractText requis" });
 
-    const result = await analyzeAndSave(userId, contractText, filename);
+    const parsed = analyzeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Données invalides" });
+    const { contractText, filename } = parsed.data;
+
+    const result = await analyzeAndSave(userId, contractText, filename ?? undefined);
     return res.status(200).json(result);
   } catch (err: any) {
     return handleServerError(res, "/compliance/analyze-contract", err);
   }
 }
-
 export async function listConversations(req: Request, res: Response) {
   try {
     const userId = req.user?.userId;

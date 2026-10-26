@@ -46,6 +46,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgresql://complianceiq:${POSTGRES_PASSWORD}@postgres:5432/complianceiq
       RAG_SERVICE_URL: http://rag-service:4000
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET missing}

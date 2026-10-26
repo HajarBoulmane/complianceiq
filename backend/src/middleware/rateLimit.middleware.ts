@@ -1,4 +1,12 @@
 import rateLimit from "express-rate-limit";
+import type { Request, Response } from "express";
+
+const logAndBlock =
+  (message: { error: string }) =>
+  (req: Request, res: Response, _next: unknown, options: { statusCode: number }) => {
+    console.warn("[security] rate_limit_hit", { path: req.path, ip: req.ip });
+    res.status(options.statusCode).json(message);
+  };
 
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -16,12 +24,15 @@ export const analyzeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const tooManyAttempts = { error: "Trop de tentatives, réessayez plus tard" };
+
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Trop de tentatives, réessayez plus tard" },
+  message: tooManyAttempts,
+  handler: logAndBlock(tooManyAttempts),
 });
 
 export const codeLimiter = rateLimit({
@@ -29,5 +40,6 @@ export const codeLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Trop de tentatives, réessayez plus tard" },
+  message: tooManyAttempts,
+  handler: logAndBlock(tooManyAttempts),
 });

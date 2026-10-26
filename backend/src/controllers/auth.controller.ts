@@ -64,6 +64,7 @@ export async function login(req: Request, res: Response) {
       return res.status(400).json({ error: "Use Google sign-in for this account" });
     }
     if (message === "INVALID_CREDENTIALS") {
+      console.warn("[security] login_failed", { ip: req.ip });
       return res.status(401).json({ error: "Invalid email or password" });
     }
     console.error("Login failed:", error);
@@ -83,6 +84,7 @@ export async function verifyEmailHandler(req: Request, res: Response) {
       console.error("Email verification failed:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
+    console.warn("[security] verify_code_failed", { ip: req.ip });
     return res.status(400).json({ error: "Invalid or expired code" });
   }
 }
